@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os  # این کتابخانه برای خواندن اطلاعات امنیتی است
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
 from google import genai
