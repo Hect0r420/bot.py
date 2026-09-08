@@ -8,8 +8,8 @@ from google.genai import types as genai_types
 # ==========================================
 # ۱. تنظیمات و اطلاعات پایه (Config)
 # ==========================================
-TELEGRAM_BOT_TOKEN = ""
-GEMINI_API_KEY = ""
+TELEGRAM_BOT_TOKEN = "TELEGRAM_BOT_TOKEN"
+GEMINI_API_KEY = "GEMINI_API_KEY"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
