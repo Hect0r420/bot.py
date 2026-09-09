@@ -1,4 +1,4 @@
-import asyncio
+،import asyncio
 import logging
 import os  # این کتابخانه برای خواندن اطلاعات امنیتی است
 from aiogram import Bot, Dispatcher, F, types
@@ -9,8 +9,8 @@ from google.genai import types as genai_types
 # ==========================================
 # ۱. تنظیمات و اطلاعات پایه (Config)
 # ==========================================
-TELEGRAM_BOT_TOKEN = os.getenv"TELEGRAM_BOT_TOKEN"
-GEMINI_API_KEY = os.getenv"GEMINI_API_KEY"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
