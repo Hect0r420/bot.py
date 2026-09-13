@@ -1,8 +1,12 @@
 import asyncio
 import logging
 import os  # این کتابخانه برای خواندن اطلاعات امنیتی است
+from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
+from aiogram.webhook.aiohttp_server import (
+    SimpleRequestHandler, setup_application
+)
 from google import genai
 from google.genai import types as genai_types
 
@@ -84,12 +88,43 @@ async def handle_all_messages(message: types.Message):
 # ۴. استارت اصلی برنامه
 # ==========================================
 async def main():
-  print(
-      ">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی"
-      " است..."
-  )
-  await bot.delete_webhook(drop_pending_updates=True)
-  await dp.start_polling(bot)
+    print(
+    ">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است..."
+)
+
+    RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+    PORT = int(os.getenv("PORT", 10000))
+    WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+
+    # ست کردن Webhook در تلگرام
+    await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
+    print(f">>> Webhook تنظیم شد: {RENDER_URL}{WEBHOOK_PATH}")
+
+    # ساخت وب‌سرور aiohttp
+    app = web.Application()
+
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+
+    # این خط برای UptimeRobot (بیدار موندن)
+    async def health_check(request):
+        return web.Response(text="Hector Bot is alive!")
+
+    app.router.add_get("/health", health_check)
+
+    setup_application(app, dp, bot=bot)
+
+    # اجرای وب‌سرور
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+    await site.start()
+
+    print(f">>> سرور روی پورت {PORT} بالا آمد. ربات آماده است!")
+    await asyncio.Event().wait()
 
 
 if __name__ == "__main__":
