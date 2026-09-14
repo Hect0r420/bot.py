@@ -37,17 +37,20 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 def get_ai_response(user_message: str) -> str:
-  try:
-    response = ai_client.models.generate_content(
-        model="gemini-3.6-flash",
-        contents=user_message,
-        config=genai_types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION
-        ),
-    )
-    return response.text
-  except Exception as e:
-    return f"خطا در پردازش هوش مصنوعی: {e}"
+    try:
+        response = ai_client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=user_message,
+            config=genai_types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION
+            ),
+        )
+        return response.text
+    except Exception as e:
+        error_str = str(e)
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
+            return "🙏 متاسفانه در حال حاضر ظرفیت پاسخگویی هوش مصنوعی تکمیل شده است. لطفاً چند دقیقه دیگه دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
+        return f"خطا در پردازش هوش مصنوعی: {e}"
 
 
 # ==========================================
