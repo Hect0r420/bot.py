@@ -94,6 +94,25 @@ async def handle_chat_ai(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.callback_query(F.data == "about_us")
+async def handle_about_us(callback: types.CallbackQuery):
+    about_text = (
+        "ℹ️ **درباره هکتور آنلاین شاپ**\n\n"
+        "به «هکتور آنلاین شاپ» خوش آمدید! 🛍️\n\n"
+        "ما یک مجموعه‌ی آنلاین هستیم که با هدف ارائه‌ی بهترین محصولات با کیفیت و قیمت مناسب فعالیت می‌کنیم.\n\n"
+        "🎯 **هدف ما:**\n"
+        "جلب رضایت شما مشتریان عزیز و ارائه‌ی تجربه‌ی خرید آسان و مطمئن.\n\n"
+        "✅ **چرا ما؟**\n"
+        "• محصولات اورجینال و باکیفیت\n"
+        "• قیمت‌های رقابتی و منصفانه\n"
+        "• پشتیبانی پاسخگو و سریع\n"
+        "• ارسال سریع به سراسر کشور\n\n"
+        "🙏 از اینکه ما رو انتخاب کردید صمیمانه سپاسگزاریم.\n"
+        "تیم هکتور آنلاین شاپ ❤️"
+    )
+    await callback.message.answer(about_text, parse_mode="Markdown")
+    await callback.answer()
+
 
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
