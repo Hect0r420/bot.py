@@ -1,4 +1,4 @@
 aiogram
 google-genai
 aiohttp
-aiosqlite
+asyncpg
