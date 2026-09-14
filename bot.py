@@ -127,6 +127,82 @@ async def handle_contact_us(callback: types.CallbackQuery):
     await callback.message.answer(contact_text, parse_mode="Markdown")
     await callback.answer()
 
+@dp.callback_query(F.data == "faq")
+async def handle_faq(callback: types.CallbackQuery):
+    # ساخت دکمه‌های شیشه‌ای برای سوالات
+    faq_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📦 ارسال چقدر طول می‌کشه؟", callback_data="faq_shipping"),
+            ],
+            [
+                InlineKeyboardButton(text="💳 روش‌های پرداخت چیه؟", callback_data="faq_payment"),
+            ],
+            [
+                InlineKeyboardButton(text="🔄 امکان مرجوعی هست؟", callback_data="faq_return"),
+            ],
+            [
+                InlineKeyboardButton(text="🕐 ساعات کاری شما چیه؟", callback_data="faq_hours"),
+            ],
+            [
+                InlineKeyboardButton(text="🔙 بازگشت به منوی اصلی", callback_data="back_to_start"),
+            ],
+        ]
+    )
+
+    await callback.message.answer(
+        "❓ **سوالات متداول**\n\n"
+        "لطفاً یکی از سوالات زیر رو انتخاب کن تا جوابش رو ببینی: 👇",
+        reply_markup=faq_keyboard,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "faq_shipping")
+async def faq_shipping(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "📦 **ارسال چقدر طول می‌کشه؟**\n\n"
+        "سفارشات شما معمولاً بین ۲ تا ۵ روز کاری به دستتون می‌رسه. "
+        "ارسال به تهران معمولاً ۱ روزه و به شهرستان‌ها ۲ تا ۵ روز کاری زمان می‌بره.\n\n"
+        "🚚 ارسال برای سفارشات بالای ۲ میلیون تومان **رایگان** است."
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "faq_payment")
+async def faq_payment(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "💳 **روش‌های پرداخت**\n\n"
+        "شما می‌توانید از روش‌های زیر پرداخت کنید:\n"
+        "• کارت به کارت\n"
+        "• پرداخت آنلاین (درگاه بانکی)\n"
+        "• پرداخت در محل (فقط تهران)\n\n"
+        "پس از ثبت سفارش، لینک پرداخت براتون ارسال میشه."
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "faq_return")
+async def faq_return(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "🔄 **امکان مرجوعی**\n\n"
+        "بله! شما تا ۷ روز پس از دریافت کالا، در صورت عدم رضایت یا وجود ایراد، "
+        "می‌توانید کالا را مرجوع کنید.\n\n"
+        "⚠️ شرط مرجوعی: کالا باید در بسته‌بندی اصلی و استفاده‌نشده باشد."
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "faq_hours")
+async def faq_hours(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "🕐 **ساعات کاری ما**\n\n"
+        "ما همه روزه از ساعت **۱۰ صبح تا ۱۰ شب** پاسخگوی شما هستیم.\n\n"
+        "در خارج از این ساعات، می‌تونید از دکمه‌ی «گفتگو با هوش مصنوعی» استفاده کنید. "
+        "هکتور ۲۴ ساعته در خدمت شماست! 😊"
+    )
+    await callback.answer()
+
 
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
