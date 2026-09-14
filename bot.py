@@ -232,6 +232,29 @@ async def back_to_start(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.callback_query(F.data == "products")
+async def handle_products(callback: types.CallbackQuery):
+    products_text = (
+        "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
+        "🔄 **در حال به‌روزرسانی...**\n\n"
+        "محصولات ما به‌زودی با قیمت‌های جدید و تخفیف‌های ویژه در این بخش قرار می‌گیرن.\n\n"
+        "📞 برای اطلاع از موجودی و قیمت محصولات، لطفاً با پشتیبانی تماس بگیرید یا از دکمه‌ی «💬 گفتگو با هوش مصنوعی» استفاده کنید.\n\n"
+        "🙏 از صبر و شکیبایی شما سپاسگزاریم."
+    )
+    await callback.message.answer(products_text, parse_mode="Markdown")
+    await callback.answer()
+
+@dp.callback_query(F.data == "track_order")
+async def handle_track_order(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "📦 **پیگیری سفارش**\n\n"
+        "برای پیگیری سفارش خود، لطفاً **کد سفارش** خود را ارسال کنید.\n\n"
+        "مثال: `ORD-12345`\n\n"
+        "📞 یا برای پیگیری سریع‌تر با شماره پشتیبانی تماس بگیرید:\n"
+        "`09017674604`"
+    )
+    await callback.answer()
+
 
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
