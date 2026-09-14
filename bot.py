@@ -113,6 +113,20 @@ async def handle_about_us(callback: types.CallbackQuery):
     await callback.message.answer(about_text, parse_mode="Markdown")
     await callback.answer()
 
+@dp.callback_query(F.data == "contact_us")
+async def handle_contact_us(callback: types.CallbackQuery):
+    my_phone_number = "09017674604"
+    
+    contact_text = (
+        "📞 **ارتباط با مدیریت هکتور آنلاین شاپ:**\n\n"
+        "شما می‌توانید برای پیگیری سفارشات با شماره زیر در ارتباط باشید:\n"
+        f"📱 شماره تماس: `{my_phone_number}`\n\n"
+        "ساعات پاسخگویی: همه روزه از ساعت ۱۰ صبح تا ۱۰ شب\n\n"
+        "💬 همچنین می‌توانید از طریق دکمه‌ی «گفتگو با هوش مصنوعی» سوالات خود را بپرسید."
+    )
+    await callback.message.answer(contact_text, parse_mode="Markdown")
+    await callback.answer()
+
 
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
