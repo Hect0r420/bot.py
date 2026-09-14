@@ -203,6 +203,35 @@ async def faq_hours(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.callback_query(F.data == "back_to_start")
+async def back_to_start(callback: types.CallbackQuery):
+    # ساخت مجدد دکمه‌های منوی اصلی
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🛒 مشاهده محصولات", callback_data="products"),
+                InlineKeyboardButton(text="📦 پیگیری سفارش", callback_data="track_order"),
+            ],
+            [
+                InlineKeyboardButton(text="📞 تماس با ما", callback_data="contact_us"),
+                InlineKeyboardButton(text="❓ سوالات متداول", callback_data="faq"),
+            ],
+            [
+                InlineKeyboardButton(text="ℹ️ درباره ما", callback_data="about_us"),
+            ],
+            [
+                InlineKeyboardButton(text="💬 گفتگو با هوش مصنوعی", callback_data="chat_ai"),
+            ],
+        ]
+    )
+
+    await callback.message.answer(
+        "به منوی اصلی برگشتیم! 👋\n"
+        "لطفاً یکی از گزینه‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard
+    )
+    await callback.answer()
+
 
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
