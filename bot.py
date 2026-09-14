@@ -3,6 +3,7 @@ import logging
 import os  # این کتابخانه برای خواندن اطلاعات امنیتی است
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.webhook.aiohttp_server import (
     SimpleRequestHandler, setup_application
@@ -55,10 +56,43 @@ def get_ai_response(user_message: str) -> str:
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-  await message.answer(
-      "سلام هکتور عزیز! ربات فروشگاه «هکتور آنلاین شاپ» آماده و آنلاین است.\nچطور"
-      " می‌توانم کمکتان کنم؟"
-  )
+    # ساخت دکمه‌های شیشه‌ای
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🛒 مشاهده محصولات", callback_data="products"),
+                InlineKeyboardButton(text="📦 پیگیری سفارش", callback_data="track_order"),
+            ],
+            [
+                InlineKeyboardButton(text="📞 تماس با ما", callback_data="contact_us"),
+                InlineKeyboardButton(text="❓ سوالات متداول", callback_data="faq"),
+            ],
+            [
+                InlineKeyboardButton(text="ℹ️ درباره ما", callback_data="about_us"),
+            ],
+            [
+                InlineKeyboardButton(text="💬 گفتگو با هوش مصنوعی", callback_data="chat_ai"),
+            ],
+        ]
+    )
+
+    await message.answer(
+        "سلام رفیق! 👋 خوش اومدی به «هکتور آنلاین شاپ» 🛍️\n\n"
+        "من هکتور هستم، دستیار هوشمند این مجموعه. اینجا می‌تونی:\n"
+        "✅ موجودی محصولات رو چک کنی\n"
+        "✅ سفارش ثبت کنی\n"
+        "✅ و هر سوالی داشتی ازم بپرسی\n\n"
+        "لطفاً یکی از گزینه‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard
+    )
+
+@dp.callback_query(F.data == "chat_ai")
+async def handle_chat_ai(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "خب رفیق! 😊 من اینجام. هر سوالی درباره محصولات، موجودی یا هر چیز دیگه‌ای داری، بپرس تا کمکت کنم.\n\n"
+        "فقط کافیه سوالت رو تایپ کنی و بفرستی. 👇"
+    )
+    await callback.answer()
 
 
 # بخش تماس با ما
