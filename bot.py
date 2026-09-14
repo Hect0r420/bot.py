@@ -256,6 +256,30 @@ async def handle_track_order(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.message(Command("stats"))
+async def cmd_stats(message: types.Message):
+    # گرفتن تعداد کاربران از دیتابیس
+    import aiosqlite
+    from database import DB_NAME
+    
+    async with aiosqlite.connect(DB_NAME) as db:
+        async with db.execute("SELECT COUNT(*) FROM users") as cursor:
+            user_count = (await cursor.fetchone())[0]
+        
+        async with db.execute("SELECT COUNT(*) FROM products") as cursor:
+            product_count = (await cursor.fetchone())[0]
+        
+        async with db.execute("SELECT COUNT(*) FROM orders") as cursor:
+            order_count = (await cursor.fetchone())[0]
+    
+    await message.answer(
+        f"📊 **آمار دیتابیس هکتور:**\n\n"
+        f"👥 تعداد کاربران: `{user_count}`\n"
+        f"🛒 تعداد محصولات: `{product_count}`\n"
+        f"📦 تعداد سفارشات: `{order_count}`",
+        parse_mode="Markdown"
+    )
+
 
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
