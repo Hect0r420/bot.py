@@ -10,6 +10,7 @@ from aiogram.webhook.aiohttp_server import (
 )
 from google import genai
 from google.genai import types as genai_types
+from database import init_db, add_user, get_all_products, create_order, get_order_status
 
 # ==========================================
 # ۱. تنظیمات و اطلاعات پایه (Config)
@@ -286,6 +287,10 @@ async def main():
     print(
     ">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است..."
 )
+
+# راه‌اندازی دیتابیس
+await init_db()
+print(">>> دیتابیس راه‌اندازی شد.")
 
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
     PORT = int(os.getenv("PORT", 10000))
