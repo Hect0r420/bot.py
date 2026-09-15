@@ -116,3 +116,19 @@ async def get_order_status(order_code: str):
         return row
     finally:
         await conn.close()
+
+async def add_user(user_id: int, username: str, first_name: str):
+    """اضافه کردن کاربر جدید (اگه نباشه)"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """INSERT INTO users (user_id, username, first_name)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (user_id) DO NOTHING""",
+            user_id, username, first_name
+        )
+        print(f"✅ کاربر {user_id} با موفقیت ثبت شد.")
+    except Exception as e:
+        print(f"❌ خطا در ثبت کاربر: {e}")
+    finally:
+        await conn.close()
