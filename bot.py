@@ -288,6 +288,69 @@ async def cmd_stats(message: types.Message):
     )
 
 
+# ==========================================
+# بخش ادمین: اضافه کردن محصول
+# ==========================================
+ADMIN_ID = 278497678  # 🔴 اینجا آیدی عددی تلگرام خودت رو بذار
+
+
+@dp.message(Command("add_product"))
+async def cmd_add_product(message: types.Message):
+    # چک کردن ادمین بودن
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    await message.answer(
+        "🛒 **افزودن محصول جدید**\n\n"
+        "لطفاً اطلاعات محصول رو به این ترتیب و با **کاما (`,`)** از هم جدا کن و بفرست:\n\n"
+        "`نام محصول, قیمت, موجودی, دسته‌بندی`\n\n"
+        "**مثال:**\n"
+        "`هدفون بی‌سیم, 850000, 10, لوازم جانبی`",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(F.text.regexp(r"^.+,.+,.+,.+$"))
+async def handle_product_input(message: types.Message):
+    # فقط ادمین
+    if message.from_user.id != ADMIN_ID:
+        return  # برای غیر ادمین، هیچ کاری نمی‌کنه (می‌ره سمت AI)
+
+    # جدا کردن اطلاعات با کاما
+    parts = [p.strip() for p in message.text.split(",")]
+
+    if len(parts) != 4:
+        await message.answer(
+            "❌ فرمت اشتباهه! لطفاً دقیقاً ۴ بخش با کاما جدا کن:\n"
+            "`نام, قیمت, موجودی, دسته‌بندی`",
+            parse_mode="Markdown"
+        )
+        return
+
+    name, price_str, stock_str, category = parts
+
+    try:
+        price = int(price_str)
+        stock = int(stock_str)
+    except ValueError:
+        await message.answer("❌ قیمت و موجودی باید عدد باشن!")
+        return
+
+    # ذخیره در دیتابیس
+    from database import add_product
+    await add_product(name, price, stock, category)
+
+    await message.answer(
+        f"✅ **محصول با موفقیت اضافه شد!**\n\n"
+        f"📦 نام: {name}\n"
+        f"💰 قیمت: {price:,} تومان\n"
+        f"🔢 موجودی: {stock}\n"
+        f"🏷️ دسته‌بندی: {category}",
+        parse_mode="Markdown"
+    )
+
+
 # بخش تماس با ما
 @dp.message(F.text == "تماس با ما")
 async def contact_us(message: types.Message):
