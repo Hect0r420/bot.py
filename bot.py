@@ -312,7 +312,7 @@ async def main():
     print(">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است...")
 
     # راه‌اندازی دیتابیس
-    await init_db()
+await init_db()
     print(">>> دیتابیس راه‌اندازی شد.")
 
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
@@ -320,7 +320,7 @@ async def main():
     WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 
     # ست کردن Webhook در تلگرام
-    await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
+await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
     print(f">>> Webhook تنظیم شد: {RENDER_URL}{WEBHOOK_PATH}")
 
     # ساخت وب‌سرور aiohttp
