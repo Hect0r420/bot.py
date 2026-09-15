@@ -245,14 +245,41 @@ async def back_to_start(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "products")
 async def handle_products(callback: types.CallbackQuery):
-    products_text = (
-        "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
-        "🔄 **در حال به‌روزرسانی...**\n\n"
-        "محصولات ما به‌زودی با قیمت‌های جدید و تخفیف‌های ویژه در این بخش قرار می‌گیرن.\n\n"
-        "📞 برای اطلاع از موجودی و قیمت محصولات، لطفاً با پشتیبانی تماس بگیرید یا از دکمه‌ی «💬 گفتگو با هوش مصنوعی» استفاده کنید.\n\n"
-        "🙏 از صبر و شکیبایی شما سپاسگزاریم."
+    # گرفتن محصولات از دیتابیس
+    from database import get_connection
+    
+    conn = await get_connection()
+    try:
+        products = await conn.fetch("SELECT * FROM products WHERE stock > 0 ORDER BY product_id")
+    finally:
+        await conn.close()
+
+    if not products:
+        await callback.message.answer(
+            "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
+            "😔 در حال حاضر هیچ محصولی موجود نیست.\n\n"
+            "📞 برای اطلاع از موجودی، با پشتیبانی تماس بگیرید یا از دکمه‌ی «💬 گفتگو با هوش مصنوعی» استفاده کنید."
+        )
+        await callback.answer()
+        return
+
+    # ساخت متن لیست محصولات
+    text = "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
+    for p in products:
+        text += (
+            f"🔹 **{p['name']}**\n"
+            f"💰 قیمت: {p['price']:,} تومان\n"
+            f"📦 موجودی: {p['stock']} عدد\n"
+            f"🏷️ دسته‌بندی: {p['category'] or 'متفرقه'}\n"
+            f"─────────────\n"
+        )
+
+    text += (
+        "\n📝 برای ثبت سفارش، نام محصول مورد نظرتون رو بنویسید و بفرستید.\n"
+        "یا از دکمه‌ی «💬 گفتگو با هوش مصنوعی» استفاده کنید."
     )
-    await callback.message.answer(products_text, parse_mode="Markdown")
+
+    await callback.message.answer(text, parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "track_order")
