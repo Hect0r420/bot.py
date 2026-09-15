@@ -12,7 +12,6 @@ from google import genai
 from google.genai import types as genai_types
 from database import init_db, add_user, get_all_products, create_order, get_order_status
 
-print(f"DEBUG URL: {os.getenv('DATABASE_URL')}")
 # ==========================================
 # ۱. تنظیمات و اطلاعات پایه (Config)
 # ==========================================
