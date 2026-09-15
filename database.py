@@ -83,6 +83,9 @@ async def add_product(name: str, price: int, stock: int, category: str):
             "INSERT INTO products (name, price, stock, category) VALUES ($1, $2, $3, $4)",
             name, price, stock, category
         )
+        print(f"✅ محصول '{name}' با موفقیت اضافه شد.")
+    except Exception as e:
+        print(f"❌ خطا در اضافه کردن محصول: {e}")
     finally:
         await conn.close()
 
