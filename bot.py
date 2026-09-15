@@ -60,6 +60,13 @@ def get_ai_response(user_message: str) -> str:
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
+
+# ثبت کاربر در دیتابیس
+await add_user(
+    user_id=message.from_user.id,
+    username=message.from_user.username or "ندارد",
+    first_name=message.from_user.first_name or "کاربر"
+)
     # ساخت دکمه‌های شیشه‌ای
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
