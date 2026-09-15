@@ -263,18 +263,15 @@ async def handle_track_order(callback: types.CallbackQuery):
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
     # گرفتن تعداد کاربران از دیتابیس
-    import aiosqlite
-    from database import DB_NAME
+    from database import get_connection
     
-    async with aiosqlite.connect(DB_NAME) as db:
-        async with db.execute("SELECT COUNT(*) FROM users") as cursor:
-            user_count = (await cursor.fetchone())[0]
-        
-        async with db.execute("SELECT COUNT(*) FROM products") as cursor:
-            product_count = (await cursor.fetchone())[0]
-        
-        async with db.execute("SELECT COUNT(*) FROM orders") as cursor:
-            order_count = (await cursor.fetchone())[0]
+    conn = await get_connection()
+    try:
+        user_count = await conn.fetchval("SELECT COUNT(*) FROM users")
+        product_count = await conn.fetchval("SELECT COUNT(*) FROM products")
+        order_count = await conn.fetchval("SELECT COUNT(*) FROM orders")
+    finally:
+        await conn.close()
     
     await message.answer(
         f"📊 **آمار دیتابیس هکتور:**\n\n"
