@@ -2,8 +2,6 @@ import os
 import asyncpg
 import ssl
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-print(f"DEBUG: DATABASE_URL = {DATABASE_URL}")
 
 # ساخت یک SSL context برای اتصال امن به Neon
 ssl_context = ssl.create_default_context()
@@ -14,7 +12,6 @@ ssl_context.verify_mode = ssl.CERT_NONE
 async def get_connection():
     """گرفتن یک اتصال به دیتابیس PostgreSQL"""
     return await asyncpg.connect(DATABASE_URL, ssl=ssl_context)
-
 
 async def init_db():
     """ساخت جدول‌های دیتابیس در اولین اجرا"""
@@ -29,6 +26,9 @@ async def init_db():
                 joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # اضافه کردن ستون‌های جدید به users
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT")
+        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday TEXT")
 
         # جدول محصولات
         await conn.execute("""
@@ -41,6 +41,8 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # اضافه کردن ستون عکس به products
+        await conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT")
 
         # جدول سفارشات
         await conn.execute("""
@@ -51,10 +53,22 @@ async def init_db():
                 product_id INTEGER NOT NULL,
                 quantity INTEGER DEFAULT 1,
                 total_price BIGINT NOT NULL,
-                status TEXT DEFAULT 'در حال پردازش',
+                status TEXT DEFAULT 'در انتظار پرداخت',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # جدول سفارشات نیمه‌کاره
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS pending_orders (
+                user_id BIGINT PRIMARY KEY,
+                product_id INTEGER NOT NULL,
+                quantity INTEGER,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        print("✅ جدول‌ها و ستون‌ها با موفقیت ساخته/به‌روزرسانی شدن.")
     finally:
         await conn.close()
 
@@ -75,13 +89,14 @@ async def add_user(user_id: int, username: str, first_name: str):
         await conn.close()
 
 
-async def add_product(name: str, price: int, stock: int, category: str):
+async def add_product(name: str, price: int, stock: int, category: str, image_url: str = None):
     """اضافه کردن محصول جدید (فقط توسط ادمین)"""
     conn = await get_connection()
     try:
         await conn.execute(
-            "INSERT INTO products (name, price, stock, category) VALUES ($1, $2, $3, $4)",
-            name, price, stock, category
+            """INSERT INTO products (name, price, stock, category, image_url)
+               VALUES ($1, $2, $3, $4, $5)""",
+            name, price, stock, category, image_url
         )
         print(f"✅ محصول '{name}' با موفقیت اضافه شد.")
     except Exception as e:
