@@ -2,6 +2,7 @@ import os
 import asyncpg
 import ssl
 
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 # ساخت یک SSL context برای اتصال امن به Neon
 ssl_context = ssl.create_default_context()
