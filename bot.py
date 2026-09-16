@@ -23,8 +23,8 @@ from database import (
 # ==========================================
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ADMIN_ID = 123456789  # 🔴 اینجا آیدی عددی تلگرام خودت رو بذار
-CARD_NUMBER = "6037-XXXX-XXXX-XXXX"  # 🔴 شماره کارت خودت رو اینجا بذار
+ADMIN_ID = 278497678  # 🔴 اینجا آیدی عددی تلگرام خودت رو بذار
+CARD_NUMBER = "6219-8619-4669-5482"  # 🔴 شماره کارت خودت رو اینجا بذار
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
@@ -412,7 +412,7 @@ async def handle_order_quantity(message: types.Message):
     user_info = await get_user_info(user_id)
     if user_info and not user_info['phone_number']:
         await message.answer(
-            "📞 **لطفاً شماره تماس خودت رو وارد کن:**\n\n"
+            "📞 **09029540420 :**\n\n"
             "(مثال: `09123456789`)\n\n"
             "این اطلاعات برای هماهنگی سفارش و اطلاع‌رسانی تخفیف‌ها استفاده میشه."
         )
@@ -553,4 +553,227 @@ async def cmd_confirm_order(message: types.Message):
     try:
         order = await conn.fetchrow("SELECT * FROM orders WHERE order_code = $1", order_code)
         if not order:
-            await messag
+            await message.answer(f"❌ سفارشی با کد `{order_code}` پیدا نشد.", parse_mode="Markdown")
+            return
+        await conn.execute(
+            "UPDATE orders SET status = $1 WHERE order_code = $2",
+            "در حال پردازش", order_code
+        )
+    finally:
+        await conn.close()
+
+    await message.answer(
+        f"✅ **سفارش تایید شد!**\n\n"
+        f"🆔 کد سفارش: `{order_code}`\n"
+        f"📦 وضعیت جدید: **در حال پردازش**",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("out_of_stock"))
+async def cmd_out_of_stock(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) != 2:
+        await message.answer(
+            "❌ فرمت اشتباهه!\n\n**مثال:**\n`/out_of_stock هدفون بی‌سیم`",
+            parse_mode="Markdown"
+        )
+        return
+
+    query = parts[1].strip()
+    conn = await get_connection()
+    try:
+        if query.isdigit():
+            product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", int(query))
+        else:
+            product = await conn.fetchrow("SELECT * FROM products WHERE name ILIKE $1", f"%{query}%")
+
+        if not product:
+            await message.answer(f"❌ محصولی با `{query}` پیدا نشد.", parse_mode="Markdown")
+            return
+
+        await conn.execute("UPDATE products SET stock = 0 WHERE product_id = $1", product['product_id'])
+        print(f"✅ موجودی '{product['name']}' صفر شد.")
+    finally:
+        await conn.close()
+
+    await message.answer(
+        f"✅ **موجودی صفر شد!**\n\n"
+        f"🆔 کد: `{product['product_id']}`\n"
+        f"📦 نام: {product['name']}",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("delete_product"))
+async def cmd_delete_product(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip().isdigit():
+        await message.answer(
+            "❌ فرمت اشتباهه!\n\n**مثال:**\n`/delete_product 3`",
+            parse_mode="Markdown"
+        )
+        return
+
+    product_id = int(parts[1].strip())
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", product_id)
+        if not product:
+            await message.answer(f"❌ محصولی با آیدی `{product_id}` پیدا نشد.", parse_mode="Markdown")
+            return
+        await conn.execute("DELETE FROM products WHERE product_id = $1", product_id)
+    finally:
+        await conn.close()
+
+    await message.answer(
+        f"✅ **محصول حذف شد!**\n\n"
+        f"🆔 کد: `{product_id}`\n"
+        f"📦 نام: {product['name']}",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("users"))
+async def cmd_users(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    conn = await get_connection()
+    try:
+        users = await conn.fetch("SELECT * FROM users ORDER BY joined_at DESC")
+    finally:
+        await conn.close()
+
+    if not users:
+        await message.answer("👥 هیچ کاربری ثبت نشده.")
+        return
+
+    text = f"👥 **لیست کاربران** (تعداد: {len(users)})\n\n"
+    for u in users:
+        phone = u['phone_number'] or "❌ ثبت نشده"
+        birthday = u['birthday'] or "❌ ثبت نشده"
+        text += (
+            f"🔹 **{u['first_name']}**\n"
+            f"🆔 `{u['user_id']}`\n"
+            f"📞 `{phone}`\n"
+            f"🎂 `{birthday}`\n"
+            f"─────────────\n"
+        )
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await message.answer(text, parse_mode="Markdown")
+
+
+@dp.message(Command("orders"))
+async def cmd_orders(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    conn = await get_connection()
+    try:
+        orders = await conn.fetch(
+            """SELECT o.*, u.first_name, u.phone_number, p.name as product_name
+               FROM orders o
+               LEFT JOIN users u ON o.user_id = u.user_id
+               LEFT JOIN products p ON o.product_id = p.product_id
+               ORDER BY o.created_at DESC LIMIT 20"""
+        )
+    finally:
+        await conn.close()
+
+    if not orders:
+        await message.answer("📦 هیچ سفارشی ثبت نشده.")
+        return
+
+    text = f"📦 **آخرین سفارشات** (تعداد: {len(orders)})\n\n"
+    for o in orders:
+        text += (
+            f"🆔 `{o['order_code']}`\n"
+            f"👤 {o['first_name'] or 'نامشخص'}\n"
+            f"📞 `{o['phone_number'] or 'ندارد'}`\n"
+            f"📦 {o['product_name'] or 'نامشخص'}\n"
+            f"🔢 تعداد: {o['quantity']}\n"
+            f"💰 {o['total_price']:,} تومان\n"
+            f"📊 **{o['status']}**\n"
+            f"─────────────\n"
+        )
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await message.answer(text, parse_mode="Markdown")
+
+
+# ==========================================
+# ۸. پیگیری سفارش
+# ==========================================
+@dp.callback_query(F.data == "track_order")
+async def handle_track_order(callback: types.CallbackQuery):
+    await callback.message.answer(
+        "📦 **پیگیری سفارش**\n\n"
+        "برای پیگیری سفارش خود، لطفاً **کد سفارش** خود را ارسال کنید.\n\n"
+        "مثال: `ORD-12345`\n\n"
+        "📞 یا برای پیگیری سریع‌تر با شماره پشتیبانی تماس بگیرید:\n"
+        "`09017674604`"
+    )
+    await callback.answer()
+
+
+# ==========================================
+# ۹. AI (آخرین هندلر - Fallback)
+# ==========================================
+@dp.message(F.text)
+async def handle_all_messages(message: types.Message):
+    response_text = await get_ai_response_async(message.text)
+    await message.answer(response_text)
+
+
+# ==========================================
+# ۱۰. اجرای اصلی (Webhook)
+# ==========================================
+async def main():
+    print(">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است...")
+
+    await init_db()
+    print(">>> دیتابیس راه‌اندازی شد.")
+
+    RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
+    PORT = int(os.getenv("PORT", 10000))
+    WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+
+    await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
+    print(f">>> Webhook تنظیم شد: {RENDER_URL}{WEBHOOK_PATH}")
+
+    app = web.Application()
+
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
+
+    async def health_check(request):
+        return web.Response(text="Hector Bot is alive!")
+
+    app.router.add_get("/health", health_check)
+
+    setup_application(app, dp, bot=bot)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TC
