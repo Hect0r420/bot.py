@@ -27,7 +27,6 @@ async def init_db():
                 joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # اضافه کردن ستون‌های جدید به users
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone_number TEXT")
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday TEXT")
 
@@ -42,7 +41,6 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        # اضافه کردن ستون عکس به products
         await conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT")
 
         # جدول سفارشات
@@ -68,22 +66,24 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-# جدول کدهای تخفیف
-       await conn.execute("""
-    CREATE TABLE IF NOT EXISTS coupons (
-        coupon_id SERIAL PRIMARY KEY,
-        code TEXT UNIQUE NOT NULL,
-        discount_percent INTEGER NOT NULL,
-        max_uses INTEGER DEFAULT 0,
-        used_count INTEGER DEFAULT 0,
-        is_active BOOLEAN DEFAULT TRUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-""")
+
+        # جدول کدهای تخفیف
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS coupons (
+                coupon_id SERIAL PRIMARY KEY,
+                code TEXT UNIQUE NOT NULL,
+                discount_percent INTEGER NOT NULL,
+                max_uses INTEGER DEFAULT 0,
+                used_count INTEGER DEFAULT 0,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
 
         print("✅ جدول‌ها و ستون‌ها با موفقیت ساخته/به‌روزرسانی شدن.")
     finally:
         await conn.close()
+  
 
 async def add_user(user_id: int, username: str, first_name: str):
     """اضافه کردن کاربر جدید (اگه نباشه)"""
