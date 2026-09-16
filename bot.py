@@ -15,7 +15,8 @@ from google.genai import types as genai_types
 from database import (
     init_db, add_user, get_all_products, create_order, get_order_status,
     save_pending_order, get_pending_order, delete_pending_order,
-    update_user_info, get_user_info, get_connection
+    update_user_info, get_user_info, get_connection,
+    add_coupon, get_coupon, use_coupon, get_all_coupons, delete_coupon
 )
 
 # ==========================================
