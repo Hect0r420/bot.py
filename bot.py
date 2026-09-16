@@ -852,6 +852,62 @@ async def handle_track_order(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==========================================
+# ۱۴. یادآوری خودکار پرداخت
+# ==========================================
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from datetime import datetime, timedelta
+
+scheduler = AsyncIOScheduler()
+
+
+async def check_pending_orders():
+    """چک کردن سفارشات در انتظار پرداخت و ارسال یادآوری"""
+    try:
+        conn = await get_connection()
+        try:
+            # پیدا کردن سفارشاتی که بیش از ۱ ساعت در انتظار پرداخت موندن
+            one_hour_ago = datetime.now() - timedelta(hours=1)
+
+            orders = await conn.fetch(
+                """SELECT o.*, u.first_name 
+                   FROM orders o
+                   LEFT JOIN users u ON o.user_id = u.user_id
+                   WHERE o.status = 'در انتظار پرداخت' 
+                   AND o.created_at < $1""",
+                one_hour_ago
+            )
+        finally:
+            await conn.close()
+
+        for order in orders:
+            try:
+                name = order['first_name'] or "رفیق"
+                message_text = (
+                    f"سلام {name} جان! 👋😊\n\n"
+                    f"دیدم سفارشت هنوز منتظر پرداخته. گفتم یه سر بزنم ببینم اوضاع چطوره! 🌟\n\n"
+                    f"🆔 کد سفارش: `{order['order_code']}`\n"
+                    f"💰 مبلغ: {order['total_price']:,} تومان\n"
+                    f"⏳ وضعیت: در انتظار پرداخت\n\n"
+                    f"اگه سوالی داری یا مشکلی پیش اومده، من اینجام کمکت کنم! 💬\n"
+                    f"فقط یادت باشه که سفارشت رزرو مونده و هر لحظه ممکنه تموم بشه. 😉\n\n"
+                    f"📞 یا اگه راحت‌تری، با پشتیبانی تماس بگیر:\n"
+                    f"`{SUPPORT_PHONE}`"
+                )
+
+                await bot.send_message(
+                    chat_id=order['user_id'],
+                    text=message_text,
+                    parse_mode="Markdown"
+                )
+                print(f"✅ یادآوری برای سفارش {order['order_code']} ارسال شد.")
+
+            except Exception as e:
+                print(f"❌ خطا در ارسال یادآوری برای سفارش {order['order_code']}: {e}")
+
+    except Exception as e:
+        print(f"❌ خطا در چک کردن سفارشات: {e}")
+
+# ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
 # ==========================================
 @dp.message(F.text)
@@ -868,6 +924,11 @@ async def main():
 
     await init_db()
     print(">>> دیتابیس راه‌اندازی شد.")
+
+    # راه‌اندازی زمان‌بند یادآوری پرداخت (هر ۱ ساعت)
+scheduler.add_job(check_pending_orders, 'interval', hours=1)
+scheduler.start()
+print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
 
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
     PORT = int(os.getenv("PORT", 10000))
