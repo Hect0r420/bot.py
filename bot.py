@@ -908,6 +908,85 @@ async def check_pending_orders():
         print(f"❌ خطا در چک کردن سفارشات: {e}")
 
 # ==========================================
+# ۱۵. گزارش فروش روزانه (اتوماتیک)
+# ==========================================
+async def send_daily_report():
+    """ارسال گزارش فروش روزانه به ادمین"""
+    try:
+        conn = await get_connection()
+        try:
+            # بازه‌ی امروز (از ساعت ۰۰:۰۰ امروز)
+            today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+            # تعداد و مجموع فروش امروز
+            orders_today = await conn.fetch(
+                """SELECT o.*, p.name as product_name, u.first_name
+                   FROM orders o
+                   LEFT JOIN products p ON o.product_id = p.product_id
+                   LEFT JOIN users u ON o.user_id = u.user_id
+                   WHERE o.created_at >= $1
+                   ORDER BY o.created_at DESC""",
+                today_start
+            )
+
+            # کاربران جدید امروز
+            new_users = await conn.fetchval(
+                "SELECT COUNT(*) FROM users WHERE joined_at >= $1",
+                today_start
+            )
+        finally:
+            await conn.close()
+
+        if not orders_today:
+            report = (
+                "📊 **گزارش فروش روزانه هکتور آنلاین شاپ**\n\n"
+                f"📅 تاریخ: {today_start.strftime('%Y-%m-%d')}\n\n"
+                "😔 امروز هیچ سفارشی ثبت نشده.\n\n"
+                f"👥 کاربران جدید: {new_users} نفر\n\n"
+                "💪 فردا روز بهتری باشه!"
+            )
+            await bot.send_message(chat_id=ADMIN_ID, text=report, parse_mode="Markdown")
+            return
+
+        # محاسبه‌ی مجموع فروش
+        total_sales = sum(o['total_price'] for o in orders_today if o['status'] != "لغو شده")
+        total_orders = len(orders_today)
+
+        report = (
+            "📊 **گزارش فروش روزانه هکتور آنلاین شاپ**\n\n"
+            f"📅 تاریخ: {today_start.strftime('%Y-%m-%d')}\n\n"
+            f"🛒 تعداد سفارشات: **{total_orders}**\n"
+            f"💰 مجموع فروش: **{total_sales:,} تومان**\n"
+            f"👥 کاربران جدید: **{new_users}** نفر\n\n"
+            "📋 **لیست سفارشات امروز:**\n"
+            "─────────────\n"
+        )
+
+        for o in orders_today:
+            report += (
+                f"🆔 `{o['order_code']}`\n"
+                f"👤 {o['first_name'] or 'نامشخص'}\n"
+                f"📦 {o['product_name'] or 'نامشخص'}\n"
+                f"🔢 تعداد: {o['quantity']} | 💰 {o['total_price']:,} تومان\n"
+                f"📊 {o['status']}\n"
+                f"─────────────\n"
+            )
+
+        report += "\n💡 **نکته:** این گزارش هر شب ساعت ۱۲ به صورت خودکار ارسال میشه."
+
+        # اگه متن خیلی طولانی شد، تیکه‌تیکه بفرست
+        if len(report) > 4000:
+            for i in range(0, len(report), 4000):
+                await bot.send_message(chat_id=ADMIN_ID, text=report[i:i+4000], parse_mode="Markdown")
+        else:
+            await bot.send_message(chat_id=ADMIN_ID, text=report, parse_mode="Markdown")
+
+        print(f"✅ گزارش فروش روزانه ارسال شد. (تعداد سفارشات: {total_orders})")
+
+    except Exception as e:
+        print(f"❌ خطا در ارسال گزارش روزانه: {e}")
+
+# ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
 # ==========================================
 @dp.message(F.text)
@@ -928,6 +1007,10 @@ async def main():
 
     # راه‌اندازی زمان‌بند یادآوری پرداخت (هر ۱ ساعت)
     scheduler.add_job(check_pending_orders, 'interval', hours=1)
+
+    # راه‌اندازی زمان‌بند گزارش فروش روزانه (هر شب ساعت ۱۲)
+    scheduler.add_job(send_daily_report, 'cron', hour=0, minute=0)
+
     scheduler.start()
     print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
 
