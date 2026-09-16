@@ -720,6 +720,32 @@ async def cmd_orders(message: types.Message):
     else:
         await message.answer(text, parse_mode="Markdown")
 
+
+@dp.message(Command("admin"))
+async def cmd_admin(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    admin_help = (
+        "👑 **پنل مدیریت هکتور آنلاین شاپ**\n\n"
+        "در اینجا لیست تمام دستورات مدیریتی موجود قرار دارد:\n\n"
+        "📦 **مدیریت محصولات:**\n"
+        "• `/add_product` → افزودن محصول جدید\n"
+        "• `/stock [کد محصول]` → مشاهده اطلاعات یک محصول\n"
+        "• `/out_of_stock [نام یا کد]` → صفر کردن موجودی محصول\n"
+        "• `/delete_product [کد محصول]` → حذف کامل محصول\n\n"
+        "🛒 **مدیریت سفارشات:**\n"
+        "• `/orders` → مشاهده‌ی ۲۰ سفارش آخر\n"
+        "• `/confirm_order [کد سفارش]` → تایید پرداخت سفارش\n\n"
+        "👥 **مدیریت کاربران:**\n"
+        "• `/users` → مشاهده‌ی لیست کاربران\n\n"
+        "📊 **آمار:**\n"
+        "• `/stats` → مشاهده‌ی آمار کلی ربات\n\n"
+        "💡 **نکته:** برای دیدن جزئیات هر دستور، فقط خود دستور رو بدون آرگومان بفرست (مثلاً `/stock`) تا راهنماش بیاد."
+    )
+    await message.answer(admin_help, parse_mode="Markdown")
+
 # ==========================================
 # ۱۱. دستور استعلام موجودی محصول (ادمین)
 # ==========================================
