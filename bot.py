@@ -988,6 +988,106 @@ async def send_daily_report():
         print(f"❌ خطا در ارسال گزارش روزانه: {e}")
 
 # ==========================================
+# ۱۶. مدیریت کد تخفیف (ادمین)
+# ==========================================
+@dp.message(Command("add_coupon"))
+async def cmd_add_coupon(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    parts = message.text.split()
+    if len(parts) != 3:
+        await message.answer(
+            "❌ فرمت اشتباهه!\n\n"
+            "**فرمت:**\n"
+            "`/add_coupon کد درصد [حداکثر استفاده]`\n\n"
+            "**مثال:**\n"
+            "`/add_coupon WELCOME10 10`\n"
+            "`/add_coupon OFF20 20 50`\n\n"
+            "💡 اگه حداکثر استفاده رو ننویسی، یعنی نامحدود.",
+            parse_mode="Markdown"
+        )
+        return
+
+    code = parts[1].upper()
+    try:
+        percent = int(parts[2])
+        max_uses = int(parts[3]) if len(parts) > 3 else 0
+    except ValueError:
+        await message.answer("❌ درصد و حداکثر استفاده باید عدد باشن!")
+        return
+
+    if percent <= 0 or percent > 100:
+        await message.answer("❌ درصد تخفیف باید بین ۱ تا ۱۰۰ باشه!")
+        return
+
+    await add_coupon(code, percent, max_uses)
+
+    await message.answer(
+        f"✅ **کد تخفیف با موفقیت اضافه شد!**\n\n"
+        f"🎟️ کد: `{code}`\n"
+        f"💰 درصد تخفیف: {percent}%\n"
+        f"🔢 حداکثر استفاده: {'نامحدود' if max_uses == 0 else max_uses}\n\n"
+        f"💡 این کد رو می‌تونی به مشتری‌ها بدی.",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("coupons"))
+async def cmd_coupons(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    coupons = await get_all_coupons()
+
+    if not coupons:
+        await message.answer("🎟️ هیچ کد تخفیفی ثبت نشده.")
+        return
+
+    text = f"🎟️ **لیست کدهای تخفیف** (تعداد: {len(coupons)})\n\n"
+    for c in coupons:
+        status = "✅ فعال" if c['is_active'] else "❌ غیرفعال"
+        max_uses = "نامحدود" if c['max_uses'] == 0 else c['max_uses']
+        text += (
+            f"🎫 کد: `{c['code']}`\n"
+            f"💰 تخفیف: {c['discount_percent']}%\n"
+            f"🔢 استفاده: {c['used_count']}/{max_uses}\n"
+            f"📊 وضعیت: {status}\n"
+            f"─────────────\n"
+        )
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await message.answer(text, parse_mode="Markdown")
+
+
+@dp.message(Command("delete_coupon"))
+async def cmd_delete_coupon(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    parts = message.text.split()
+    if len(parts) != 2:
+        await message.answer(
+            "❌ فرمت اشتباهه!\n\n**مثال:**\n`/delete_coupon WELCOME10`",
+            parse_mode="Markdown"
+        )
+        return
+
+    code = parts[1].upper()
+    await delete_coupon(code)
+
+    await message.answer(
+        f"✅ کد تخفیف `{code}` حذف شد.",
+        parse_mode="Markdown"
+    )
+
+# ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
 # ==========================================
 @dp.message(F.text)
