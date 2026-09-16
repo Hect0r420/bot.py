@@ -747,6 +747,57 @@ async def cmd_admin(message: types.Message):
     await message.answer(admin_help, parse_mode="Markdown")
 
 # ==========================================
+# ۱۳. پیگیری سفارش (دریافت کد سفارش)
+# ==========================================
+@dp.message(F.text.regexp(r"^ORD-\d{5}$"))
+async def handle_order_code(message: types.Message):
+    order_code = message.text.strip()
+
+    conn = await get_connection()
+    try:
+        # گرفتن اطلاعات سفارش با کد سفارش
+        order = await conn.fetchrow(
+            """SELECT o.*, p.name as product_name
+               FROM orders o
+               LEFT JOIN products p ON o.product_id = p.product_id
+               WHERE o.order_code = $1""",
+            order_code
+        )
+    finally:
+        await conn.close()
+
+    if not order:
+        await message.answer(
+            f"❌ سفارشی با کد `{order_code}` پیدا نشد.\n\n"
+            f"لطفاً کد سفارش رو دقیقاً همون‌طور که گرفتی وارد کن.\n"
+            f"📞 یا با پشتیبانی تماس بگیر: `{SUPPORT_PHONE}`",
+            parse_mode="Markdown"
+        )
+        return
+
+    # وضعیت سفارش رو با ایموجی مناسب نشون بده
+    status_emoji = {
+        "در انتظار پرداخت": "⏳",
+        "در حال پردازش": "🔄",
+        "ارسال شده": "🚚",
+        "تحویل داده شده": "✅",
+        "لغو شده": "❌"
+    }.get(order['status'], "📦")
+
+    await message.answer(
+        f"📦 **وضعیت سفارش شما**\n\n"
+        f"🆔 کد سفارش: `{order['order_code']}`\n"
+        f"🛍️ محصول: {order['product_name'] or 'نامشخص'}\n"
+        f"🔢 تعداد: {order['quantity']} عدد\n"
+        f"💰 مبلغ کل: {order['total_price']:,} تومان\n"
+        f"{status_emoji} وضعیت فعلی: **{order['status']}**\n\n"
+        f"📅 تاریخ ثبت: {order['created_at'].strftime('%Y-%m-%d %H:%M')}\n\n"
+        f"💬 هر سوالی داشتی، با پشتیبانی تماس بگیر:\n"
+        f"📞 `{SUPPORT_PHONE}`",
+        parse_mode="Markdown"
+    )
+
+# ==========================================
 # ۱۱. دستور استعلام موجودی محصول (ادمین)
 # ==========================================
 @dp.message(Command("stock"))
@@ -786,7 +837,7 @@ async def cmd_stock(message: types.Message):
 
 
 # ==========================================
-# ۸. پیگیری سفارش
+# ۸. پیگیری سفارش (نمایش راهنما)
 # ==========================================
 @dp.callback_query(F.data == "track_order")
 async def handle_track_order(callback: types.CallbackQuery):
@@ -795,10 +846,10 @@ async def handle_track_order(callback: types.CallbackQuery):
         "برای پیگیری سفارش خود، لطفاً **کد سفارش** خود را ارسال کنید.\n\n"
         "مثال: `ORD-12345`\n\n"
         f"📞 یا برای پیگیری سریع‌تر با شماره پشتیبانی تماس بگیرید:\n"
-        f"`{SUPPORT_PHONE}`"
+        f"`{SUPPORT_PHONE}`",
+        parse_mode="Markdown"
     )
     await callback.answer()
-
 
 # ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
