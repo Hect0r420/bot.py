@@ -922,21 +922,24 @@ async def handle_all_messages(message: types.Message):
 async def main():
     print(">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است...")
 
+    # راه‌اندازی دیتابیس
     await init_db()
     print(">>> دیتابیس راه‌اندازی شد.")
 
     # راه‌اندازی زمان‌بند یادآوری پرداخت (هر ۱ ساعت)
-scheduler.add_job(check_pending_orders, 'interval', hours=1)
-scheduler.start()
-print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
+    scheduler.add_job(check_pending_orders, 'interval', hours=1)
+    scheduler.start()
+    print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
 
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
     PORT = int(os.getenv("PORT", 10000))
     WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 
+    # ست کردن Webhook در تلگرام
     await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
     print(f">>> Webhook تنظیم شد: {RENDER_URL}{WEBHOOK_PATH}")
 
+    # ساخت وب‌سرور aiohttp
     app = web.Application()
 
     webhook_requests_handler = SimpleRequestHandler(
@@ -945,6 +948,7 @@ print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
     )
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
 
+    # این خط برای UptimeRobot (بیدار موندن)
     async def health_check(request):
         return web.Response(text="Hector Bot is alive!")
 
@@ -952,6 +956,7 @@ print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
 
     setup_application(app, dp, bot=bot)
 
+    # اجرای وب‌سرور
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
