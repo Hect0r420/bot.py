@@ -202,3 +202,61 @@ async def get_user_info(user_id: int):
         return row
     finally:
         await conn.close()
+async def add_coupon(code: str, discount_percent: int, max_uses: int = 0):
+    """اضافه کردن کد تخفیف جدید"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """INSERT INTO coupons (code, discount_percent, max_uses)
+               VALUES ($1, $2, $3)""",
+            code.upper(), discount_percent, max_uses
+        )
+        print(f"✅ کد تخفیف '{code}' اضافه شد.")
+    except Exception as e:
+        print(f"❌ خطا در اضافه کردن کد تخفیف: {e}")
+    finally:
+        await conn.close()
+
+
+async def get_coupon(code: str):
+    """گرفتن اطلاعات کد تخفیف"""
+    conn = await get_connection()
+    try:
+        row = await conn.fetchrow(
+            "SELECT * FROM coupons WHERE code = $1 AND is_active = TRUE",
+            code.upper()
+        )
+        return row
+    finally:
+        await conn.close()
+
+
+async def use_coupon(code: str):
+    """استفاده از کد تخفیف (افزایش تعداد استفاده)"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            "UPDATE coupons SET used_count = used_count + 1 WHERE code = $1",
+            code.upper()
+        )
+    finally:
+        await conn.close()
+
+
+async def get_all_coupons():
+    """گرفتن همه‌ی کدهای تخفیف"""
+    conn = await get_connection()
+    try:
+        rows = await conn.fetch("SELECT * FROM coupons ORDER BY coupon_id DESC")
+        return rows
+    finally:
+        await conn.close()
+
+
+async def delete_coupon(code: str):
+    """حذف کد تخفیف"""
+    conn = await get_connection()
+    try:
+        await conn.execute("DELETE FROM coupons WHERE code = $1", code.upper())
+    finally:
+        await conn.close()
