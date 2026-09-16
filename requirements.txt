@@ -2,3 +2,4 @@ aiogram
 google-genai
 aiohttp
 asyncpg
+apscheduler
