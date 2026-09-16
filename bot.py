@@ -794,8 +794,8 @@ async def handle_track_order(callback: types.CallbackQuery):
         "📦 **پیگیری سفارش**\n\n"
         "برای پیگیری سفارش خود، لطفاً **کد سفارش** خود را ارسال کنید.\n\n"
         "مثال: `ORD-12345`\n\n"
-        "📞 یا برای پیگیری سریع‌تر با شماره پشتیبانی تماس بگیرید:\n"
-        "`{SUPPORT_PHONE}`"
+        f"📞 یا برای پیگیری سریع‌تر با شماره پشتیبانی تماس بگیرید:\n"
+        f"`{SUPPORT_PHONE}`"
     )
     await callback.answer()
 
