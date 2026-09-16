@@ -121,3 +121,68 @@ async def get_order_status(order_code: str):
         return row
     finally:
         await conn.close()
+
+async def save_pending_order(user_id: int, product_id: int):
+    """ذخیره‌ی سفارش نیمه‌کاره (کاربر محصول رو انتخاب کرده ولی تعداد رو نداده)"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """INSERT INTO pending_orders (user_id, product_id, updated_at)
+               VALUES ($1, $2, CURRENT_TIMESTAMP)
+               ON CONFLICT (user_id) 
+               DO UPDATE SET product_id = $2, updated_at = CURRENT_TIMESTAMP""",
+            user_id, product_id
+        )
+        print(f"✅ سفارش نیمه‌کاره برای کاربر {user_id} ذخیره شد.")
+    finally:
+        await conn.close()
+
+
+async def get_pending_order(user_id: int):
+    """گرفتن سفارش نیمه‌کاره‌ی کاربر"""
+    conn = await get_connection()
+    try:
+        row = await conn.fetchrow(
+            "SELECT * FROM pending_orders WHERE user_id = $1", user_id
+        )
+        return row
+    finally:
+        await conn.close()
+
+
+async def delete_pending_order(user_id: int):
+    """پاک کردن سفارش نیمه‌کاره بعد از ثبت نهایی"""
+    conn = await get_connection()
+    try:
+        await conn.execute("DELETE FROM pending_orders WHERE user_id = $1", user_id)
+    finally:
+        await conn.close()
+
+
+async def update_user_info(user_id: int, phone_number: str = None, birthday: str = None):
+    """به‌روزرسانی اطلاعات کاربر (شماره تماس و تاریخ تولد)"""
+    conn = await get_connection()
+    try:
+        if phone_number:
+            await conn.execute(
+                "UPDATE users SET phone_number = $1 WHERE user_id = $2",
+                phone_number, user_id
+            )
+        if birthday:
+            await conn.execute(
+                "UPDATE users SET birthday = $1 WHERE user_id = $2",
+                birthday, user_id
+            )
+        print(f"✅ اطلاعات کاربر {user_id} به‌روزرسانی شد.")
+    finally:
+        await conn.close()
+
+
+async def get_user_info(user_id: int):
+    """گرفتن اطلاعات کاربر"""
+    conn = await get_connection()
+    try:
+        row = await conn.fetchrow("SELECT * FROM users WHERE user_id = $1", user_id)
+        return row
+    finally:
+        await conn.close()
