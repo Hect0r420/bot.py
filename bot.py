@@ -1,6 +1,8 @@
 import asyncio
 import logging
-import os  # این کتابخانه برای خواندن اطلاعات امنیتی است
+import os
+import random
+import string
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -10,18 +12,24 @@ from aiogram.webhook.aiohttp_server import (
 )
 from google import genai
 from google.genai import types as genai_types
-from database import init_db, add_user, get_all_products, create_order, get_order_status
+from database import (
+    init_db, add_user, get_all_products, create_order, get_order_status,
+    save_pending_order, get_pending_order, delete_pending_order,
+    update_user_info, get_user_info, get_connection
+)
 
 # ==========================================
 # ۱. تنظیمات و اطلاعات پایه (Config)
 # ==========================================
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+ADMIN_ID = 123456789  # 🔴 اینجا آیدی عددی تلگرام خودت رو بذار
+CARD_NUMBER = "6037-XXXX-XXXX-XXXX"  # 🔴 شماره کارت خودت رو اینجا بذار
+
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
 
-# شخصیت و دستورالعمل‌های هوش مصنوعی (هکتور و معرفی‌نامه دقیق)
 SYSTEM_INSTRUCTION = """
 نام تو «هکتور» است و تو دستیار هوشمند و اختصاصی مجموعه «هکتور آنلاین شاپ» هستی.
 دستورالعمل بسیار مهم: هر زمان که کاربر پیامی داد یا سوالی پرسید، باید در ابتدای پاسخ خود با صراحت بگویی:
@@ -30,20 +38,44 @@ SYSTEM_INSTRUCTION = """
 هدف اصلی تو کمک به مشتریان برای بررسی موجودی محصولات و ثبت سفارش است.
 """
 
-# ==========================================
-# ۲. بخش ارتباط با هوش مصنوعی
-# ==========================================
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
-def get_ai_response(user_message: str) -> str:
+# ==========================================
+# ۲. بخش ارتباط با هوش مصنوعی (با آگاهی از محصولات)
+# ==========================================
+async def get_ai_response_async(user_message: str) -> str:
     try:
-        response = ai_client.models.generate_content(
-            model="gemini-3.6-flash",
-            contents=user_message,
-            config=genai_types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION
-            ),
+        conn = await get_connection()
+        try:
+            products = await conn.fetch(
+                "SELECT name, price, stock, category FROM products WHERE stock > 0 ORDER BY product_id"
+            )
+        finally:
+            await conn.close()
+
+        if products:
+            products_text = "\n\n📦 **لیست محصولات موجود در فروشگاه (از دیتابیس):**\n"
+            for p in products:
+                products_text += (
+                    f"- {p['name']} | قیمت: {p['price']:,} تومان | "
+                    f"موجودی: {p['stock']} عدد | دسته: {p['category'] or 'متفرقه'}\n"
+                )
+            products_text += "\n⚠️ این اطلاعات از دیتابیس واقعی فروشگاهه. حتماً موقع جواب دادن به مشتری، از همین اطلاعات استفاده کن.\n"
+        else:
+            products_text = "\n\n⚠️ در حال حاضر هیچ محصولی توی دیتابیس موجود نیست.\n"
+
+        full_message = f"{user_message}\n{products_text}"
+
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            None, lambda: ai_client.models.generate_content(
+                model="gemini-3.6-flash",
+                contents=full_message,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION
+                ),
+            )
         )
         return response.text
     except Exception as e:
@@ -54,20 +86,16 @@ def get_ai_response(user_message: str) -> str:
 
 
 # ==========================================
-# ۳. هندلرها و دستورات تلگرام
+# ۳. منوی اصلی و شروع
 # ==========================================
-
-
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
-
-    # ثبت کاربر در دیتابیس
     await add_user(
-    user_id=message.from_user.id,
-    username=message.from_user.username or "ندارد",
-    first_name=message.from_user.first_name or "کاربر"
-)
-    # ساخت دکمه‌های شیشه‌ای
+        user_id=message.from_user.id,
+        username=message.from_user.username or "ندارد",
+        first_name=message.from_user.first_name or "کاربر"
+    )
+
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -97,6 +125,10 @@ async def cmd_start(message: types.Message):
         reply_markup=keyboard
     )
 
+
+# ==========================================
+# ۴. هندلرهای دکمه‌های شیشه‌ای
+# ==========================================
 @dp.callback_query(F.data == "chat_ai")
 async def handle_chat_ai(callback: types.CallbackQuery):
     await callback.message.answer(
@@ -104,6 +136,7 @@ async def handle_chat_ai(callback: types.CallbackQuery):
         "فقط کافیه سوالت رو تایپ کنی و بفرستی. 👇"
     )
     await callback.answer()
+
 
 @dp.callback_query(F.data == "about_us")
 async def handle_about_us(callback: types.CallbackQuery):
@@ -124,43 +157,31 @@ async def handle_about_us(callback: types.CallbackQuery):
     await callback.message.answer(about_text, parse_mode="Markdown")
     await callback.answer()
 
+
 @dp.callback_query(F.data == "contact_us")
 async def handle_contact_us(callback: types.CallbackQuery):
-    my_phone_number = "09017674604"
-    
     contact_text = (
         "📞 **ارتباط با مدیریت هکتور آنلاین شاپ:**\n\n"
         "شما می‌توانید برای پیگیری سفارشات با شماره زیر در ارتباط باشید:\n"
-        f"📱 شماره تماس: `{my_phone_number}`\n\n"
+        "📱 شماره تماس: `09017674604`\n\n"
         "ساعات پاسخگویی: همه روزه از ساعت ۱۰ صبح تا ۱۰ شب\n\n"
-        "💬 همچنین می‌توانید از طریق دکمه‌ی «گفتگو با هوش مصنوعی» سوالات خود را بپرسید."
+        "💬 همچنین می‌توانید از دکمه‌ی «گفتگو با هوش مصنوعی» سوالات خود را بپرسید."
     )
     await callback.message.answer(contact_text, parse_mode="Markdown")
     await callback.answer()
 
+
 @dp.callback_query(F.data == "faq")
 async def handle_faq(callback: types.CallbackQuery):
-    # ساخت دکمه‌های شیشه‌ای برای سوالات
     faq_keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📦 ارسال چقدر طول می‌کشه؟", callback_data="faq_shipping"),
-            ],
-            [
-                InlineKeyboardButton(text="💳 روش‌های پرداخت چیه؟", callback_data="faq_payment"),
-            ],
-            [
-                InlineKeyboardButton(text="🔄 امکان مرجوعی هست؟", callback_data="faq_return"),
-            ],
-            [
-                InlineKeyboardButton(text="🕐 ساعات کاری شما چیه؟", callback_data="faq_hours"),
-            ],
-            [
-                InlineKeyboardButton(text="🔙 بازگشت به منوی اصلی", callback_data="back_to_start"),
-            ],
+            [InlineKeyboardButton(text="📦 ارسال چقدر طول می‌کشه؟", callback_data="faq_shipping")],
+            [InlineKeyboardButton(text="💳 روش‌های پرداخت چیه؟", callback_data="faq_payment")],
+            [InlineKeyboardButton(text="🔄 امکان مرجوعی هست؟", callback_data="faq_return")],
+            [InlineKeyboardButton(text="🕐 ساعات کاری شما چیه؟", callback_data="faq_hours")],
+            [InlineKeyboardButton(text="🔙 بازگشت به منوی اصلی", callback_data="back_to_start")],
         ]
     )
-
     await callback.message.answer(
         "❓ **سوالات متداول**\n\n"
         "لطفاً یکی از سوالات زیر رو انتخاب کن تا جوابش رو ببینی: 👇",
@@ -168,6 +189,7 @@ async def handle_faq(callback: types.CallbackQuery):
         parse_mode="Markdown"
     )
     await callback.answer()
+
 
 @dp.callback_query(F.data == "faq_shipping")
 async def faq_shipping(callback: types.CallbackQuery):
@@ -214,9 +236,9 @@ async def faq_hours(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
 @dp.callback_query(F.data == "back_to_start")
 async def back_to_start(callback: types.CallbackQuery):
-    # ساخت مجدد دکمه‌های منوی اصلی
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [
@@ -235,7 +257,6 @@ async def back_to_start(callback: types.CallbackQuery):
             ],
         ]
     )
-
     await callback.message.answer(
         "به منوی اصلی برگشتیم! 👋\n"
         "لطفاً یکی از گزینه‌های زیر رو انتخاب کن: 👇",
@@ -243,11 +264,12 @@ async def back_to_start(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
+# ==========================================
+# ۵. مشاهده محصولات (با عکس)
+# ==========================================
 @dp.callback_query(F.data == "products")
 async def handle_products(callback: types.CallbackQuery):
-    # گرفتن محصولات از دیتابیس
-    from database import get_connection
-    
     conn = await get_connection()
     try:
         products = await conn.fetch("SELECT * FROM products WHERE stock > 0 ORDER BY product_id")
@@ -258,46 +280,244 @@ async def handle_products(callback: types.CallbackQuery):
         await callback.message.answer(
             "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
             "😔 در حال حاضر هیچ محصولی موجود نیست.\n\n"
-            "📞 برای اطلاع از موجودی، با پشتیبانی تماس بگیرید یا از دکمه‌ی «💬 گفتگو با هوش مصنوعی» استفاده کنید."
+            "📞 برای اطلاع از موجودی، با پشتیبانی تماس بگیرید."
         )
         await callback.answer()
         return
 
-    # ساخت متن لیست محصولات
-    text = "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
     for p in products:
-        text += (
+        caption = (
             f"🔹 **{p['name']}**\n"
             f"💰 قیمت: {p['price']:,} تومان\n"
             f"📦 موجودی: {p['stock']} عدد\n"
-            f"🏷️ دسته‌بندی: {p['category'] or 'متفرقه'}\n"
-            f"─────────────\n"
+            f"🏷️ دسته‌بندی: {p['category'] or 'متفرقه'}"
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🛒 ثبت سفارش", callback_data=f"order_{p['product_id']}")]
+            ]
+        )
+        if p['image_url']:
+            try:
+                await callback.message.answer_photo(
+                    photo=p['image_url'],
+                    caption=caption,
+                    reply_markup=keyboard,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                print(f"❌ خطا در ارسال عکس {p['name']}: {e}")
+                await callback.message.answer(
+                    caption + "\n\n⚠️ (عکس این محصول در دسترس نیست)",
+                    reply_markup=keyboard,
+                    parse_mode="Markdown"
+                )
+        else:
+            await callback.message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
+
+    await callback.answer()
+
+
+# ==========================================
+# ۶. ثبت سفارش
+# ==========================================
+@dp.callback_query(F.data.startswith("order_"))
+async def handle_order_start(callback: types.CallbackQuery):
+    product_id = int(callback.data.split("_")[1])
+
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", product_id)
+    finally:
+        await conn.close()
+
+    if not product:
+        await callback.message.answer("❌ محصول مورد نظر پیدا نشد.")
+        await callback.answer()
+        return
+
+    await save_pending_order(callback.from_user.id, product_id)
+
+    await callback.message.answer(
+        f"🛒 **ثبت سفارش: {product['name']}**\n\n"
+        f"💰 قیمت واحد: {product['price']:,} تومان\n"
+        f"📦 موجودی: {product['stock']} عدد\n\n"
+        f"لطفاً **تعداد** مورد نظرت رو بنویس و بفرست (فقط عدد):",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@dp.message(F.text.regexp(r"^\d+$"))
+async def handle_order_quantity(message: types.Message):
+    user_id = message.from_user.id
+    pending = await get_pending_order(user_id)
+    if not pending:
+        return
+
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", pending['product_id'])
+    finally:
+        await conn.close()
+
+    if not product:
+        await message.answer("❌ محصول مورد نظر پیدا نشد.")
+        await delete_pending_order(user_id)
+        return
+
+    quantity = int(message.text)
+
+    if quantity <= 0:
+        await message.answer("❌ تعداد باید عددی بزرگتر از صفر باشه.")
+        return
+
+    if quantity > product['stock']:
+        await message.answer(f"❌ متاسفانه فقط {product['stock']} عدد موجوده.")
+        return
+
+    order_code = "ORD-" + "".join(random.choices(string.digits, k=5))
+    total_price = product['price'] * quantity
+
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """INSERT INTO orders (order_code, user_id, product_id, quantity, total_price, status)
+               VALUES ($1, $2, $3, $4, $5, $6)""",
+            order_code, user_id, product['product_id'], quantity, total_price, "در انتظار پرداخت"
+        )
+        await conn.execute(
+            "UPDATE products SET stock = stock - $1 WHERE product_id = $2",
+            quantity, product['product_id']
+        )
+        print(f"✅ سفارش {order_code} ثبت شد.")
+    finally:
+        await conn.close()
+
+    await delete_pending_order(user_id)
+
+    await message.answer(
+        f"✅ **سفارش شما با موفقیت ثبت شد!**\n\n"
+        f"🆔 کد سفارش: `{order_code}`\n"
+        f"📦 محصول: {product['name']}\n"
+        f"🔢 تعداد: {quantity}\n"
+        f"💰 مبلغ کل: {total_price:,} تومان\n\n"
+        f"💳 **برای تکمیل سفارش، مبلغ {total_price:,} تومان رو به شماره کارت زیر واریز کن:**\n\n"
+        f"`{CARD_NUMBER}`\n\n"
+        f"📸 بعد از پرداخت، **عکس رسید** رو همین‌جا بفرست.\n\n"
+        f"⏳ وضعیت سفارش: **در انتظار پرداخت**",
+        parse_mode="Markdown"
+    )
+
+    user_info = await get_user_info(user_id)
+    if user_info and not user_info['phone_number']:
+        await message.answer(
+            "📞 **لطفاً شماره تماس خودت رو وارد کن:**\n\n"
+            "(مثال: `09123456789`)\n\n"
+            "این اطلاعات برای هماهنگی سفارش و اطلاع‌رسانی تخفیف‌ها استفاده میشه."
         )
 
-    text += (
-        "\n📝 برای ثبت سفارش، نام محصول مورد نظرتون رو بنویسید و بفرستید.\n"
-        "یا از دکمه‌ی «💬 گفتگو با هوش مصنوعی» استفاده کنید."
+
+@dp.message(F.text.regexp(r"^09\d{9}$"))
+async def handle_phone_number(message: types.Message):
+    user_id = message.from_user.id
+    phone = message.text.strip()
+    await update_user_info(user_id, phone_number=phone)
+    await message.answer(
+        f"✅ شماره تماس `{phone}` ذخیره شد.\n\n"
+        f"🎂 حالا **تاریخ تولدت** رو وارد کن:\n\n"
+        f"فرمت: `YYYY-MM-DD`\n"
+        f"مثال: `1995-05-20`",
+        parse_mode="Markdown"
     )
 
-    await callback.message.answer(text, parse_mode="Markdown")
-    await callback.answer()
 
-@dp.callback_query(F.data == "track_order")
-async def handle_track_order(callback: types.CallbackQuery):
-    await callback.message.answer(
-        "📦 **پیگیری سفارش**\n\n"
-        "برای پیگیری سفارش خود، لطفاً **کد سفارش** خود را ارسال کنید.\n\n"
-        "مثال: `ORD-12345`\n\n"
-        "📞 یا برای پیگیری سریع‌تر با شماره پشتیبانی تماس بگیرید:\n"
-        "`09017674604`"
+@dp.message(F.text.regexp(r"^\d{4}-\d{2}-\d{2}$"))
+async def handle_birthday(message: types.Message):
+    user_id = message.from_user.id
+    birthday = message.text.strip()
+    await update_user_info(user_id, birthday=birthday)
+    await message.answer(
+        f"🎉 **ممنون! اطلاعاتت کامل شد.**\n\n"
+        f"🎂 تاریخ تولد: `{birthday}`\n\n"
+        f"از این به بعد، توی روز تولدت تخفیف‌های ویژه‌ای برات در نظر می‌گیریم! 🎁"
     )
-    await callback.answer()
+
+
+# ==========================================
+# ۷. دستورات ادمین
+# ==========================================
+@dp.message(Command("add_product"))
+async def cmd_add_product(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    await message.answer(
+        "🛒 **افزودن محصول جدید**\n\n"
+        "لطفاً اطلاعات محصول رو به این ترتیب و با **کاما (`,`)** از هم جدا کن و بفرست:\n\n"
+        "`نام محصول, قیمت, موجودی, دسته‌بندی, لینک عکس`\n\n"
+        "**مثال:**\n"
+        "`هدفون بی‌سیم, 850000, 10, لوازم جانبی, https://example.com/image.jpg`\n\n"
+        "⚠️ اگه عکس نداری، جای لینک عکس بنویس: `-`",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(F.text.regexp(r"^.+,.+,.+,.+,.+$"))
+async def handle_product_input(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    parts = [p.strip() for p in message.text.split(",")]
+
+    if len(parts) != 5:
+        await message.answer(
+            "❌ فرمت اشتباهه! لطفاً دقیقاً ۵ بخش با کاما جدا کن:\n"
+            "`نام, قیمت, موجودی, دسته‌بندی, لینک عکس`",
+            parse_mode="Markdown"
+        )
+        return
+
+    name, price_str, stock_str, category, image_url = parts
+    if image_url == "-":
+        image_url = None
+
+    try:
+        price = int(price_str)
+        stock = int(stock_str)
+    except ValueError:
+        await message.answer("❌ قیمت و موجودی باید عدد باشن!")
+        return
+
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """INSERT INTO products (name, price, stock, category, image_url)
+               VALUES ($1, $2, $3, $4, $5)""",
+            name, price, stock, category, image_url
+        )
+        print(f"✅ محصول '{name}' اضافه شد.")
+    except Exception as e:
+        print(f"❌ خطا: {e}")
+        await message.answer(f"❌ خطا در اضافه کردن محصول: {e}")
+        return
+    finally:
+        await conn.close()
+
+    await message.answer(
+        f"✅ **محصول با موفقیت اضافه شد!**\n\n"
+        f"📦 نام: {name}\n"
+        f"💰 قیمت: {price:,} تومان\n"
+        f"🔢 موجودی: {stock}\n"
+        f"🏷️ دسته‌بندی: {category}\n"
+        f"🖼️ عکس: {'داره ✅' if image_url else 'نداره ❌'}",
+        parse_mode="Markdown"
+    )
+
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
-    # گرفتن تعداد کاربران از دیتابیس
-    from database import get_connection
-    
     conn = await get_connection()
     try:
         user_count = await conn.fetchval("SELECT COUNT(*) FROM users")
@@ -305,7 +525,6 @@ async def cmd_stats(message: types.Message):
         order_count = await conn.fetchval("SELECT COUNT(*) FROM orders")
     finally:
         await conn.close()
-    
     await message.answer(
         f"📊 **آمار دیتابیس هکتور:**\n\n"
         f"👥 تعداد کاربران: `{user_count}`\n"
@@ -315,139 +534,23 @@ async def cmd_stats(message: types.Message):
     )
 
 
-# ==========================================
-# بخش ادمین: اضافه کردن محصول
-# ==========================================
-ADMIN_ID = 278497678  # 🔴 اینجا آیدی عددی تلگرام خودت رو بذار
-
-
-@dp.message(Command("add_product"))
-async def cmd_add_product(message: types.Message):
-    # چک کردن ادمین بودن
+@dp.message(Command("confirm_order"))
+async def cmd_confirm_order(message: types.Message):
     if message.from_user.id != ADMIN_ID:
         await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
         return
 
-    await message.answer(
-        "🛒 **افزودن محصول جدید**\n\n"
-        "لطفاً اطلاعات محصول رو به این ترتیب و با **کاما (`,`)** از هم جدا کن و بفرست:\n\n"
-        "`نام محصول, قیمت, موجودی, دسته‌بندی`\n\n"
-        "**مثال:**\n"
-        "`هدفون بی‌سیم, 850000, 10, لوازم جانبی`",
-        parse_mode="Markdown"
-    )
-
-
-@dp.message(F.text.regexp(r"^.+,.+,.+,.+$"))
-async def handle_product_input(message: types.Message):
-    # فقط ادمین
-    if message.from_user.id != ADMIN_ID:
-        return  # برای غیر ادمین، هیچ کاری نمی‌کنه (می‌ره سمت AI)
-
-    # جدا کردن اطلاعات با کاما
-    parts = [p.strip() for p in message.text.split(",")]
-
-    if len(parts) != 4:
+    parts = message.text.split()
+    if len(parts) != 2:
         await message.answer(
-            "❌ فرمت اشتباهه! لطفاً دقیقاً ۴ بخش با کاما جدا کن:\n"
-            "`نام, قیمت, موجودی, دسته‌بندی`",
+            "❌ فرمت اشتباهه!\n\n**مثال:**\n`/confirm_order ORD-12345`",
             parse_mode="Markdown"
         )
         return
 
-    name, price_str, stock_str, category = parts
-
+    order_code = parts[1]
+    conn = await get_connection()
     try:
-        price = int(price_str)
-        stock = int(stock_str)
-    except ValueError:
-        await message.answer("❌ قیمت و موجودی باید عدد باشن!")
-        return
-
-    # ذخیره در دیتابیس
-    from database import add_product
-    await add_product(name, price, stock, category)
-
-    await message.answer(
-        f"✅ **محصول با موفقیت اضافه شد!**\n\n"
-        f"📦 نام: {name}\n"
-        f"💰 قیمت: {price:,} تومان\n"
-        f"🔢 موجودی: {stock}\n"
-        f"🏷️ دسته‌بندی: {category}",
-        parse_mode="Markdown"
-    )
-
-
-# بخش تماس با ما
-@dp.message(F.text == "تماس با ما")
-async def contact_us(message: types.Message):
-  my_phone_number = "09017674604"  # شماره تماس شما
-
-  contact_text = (
-      "📞 **ارتباط با مدیریت هکتور آنلاین شاپ:**\n\n"
-      "شما می‌توانید برای پیگیری سفارشات با شماره زیر در ارتباط باشید:\n"
-      f"📱 شماره تماس: `{my_phone_number}`\n\n"
-      "ساعات پاسخگویی: همه روزه از ساعت ۱۰ صبح تا ۱۰ شب"
-  )
-  await message.answer(contact_text, parse_mode="Markdown")
-
-
-@dp.message(F.text)
-async def handle_all_messages(message: types.Message):
-  loop = asyncio.get_running_loop()
-  response_text = await loop.run_in_executor(
-      None, get_ai_response, message.text
-  )
-  await message.answer(response_text)
-
-
-# ==========================================
-# ۴. استارت اصلی برنامه
-# ==========================================
-
-async def main():
-    print(">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است...")
-
-    # راه‌اندازی دیتابیس
-    await init_db()
-    print(">>> دیتابیس راه‌اندازی شد.")
-
-    RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
-    PORT = int(os.getenv("PORT", 10000))
-    WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
-
-    # ست کردن Webhook در تلگرام
-    await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
-    print(f">>> Webhook تنظیم شد: {RENDER_URL}{WEBHOOK_PATH}")
-
-    # ساخت وب‌سرور aiohttp
-    app = web.Application()
-
-    webhook_requests_handler = SimpleRequestHandler(
-        dispatcher=dp,
-        bot=bot,
-    )
-    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-
-    # این خط برای UptimeRobot (بیدار موندن)
-    async def health_check(request):
-        return web.Response(text="Hector Bot is alive!")
-
-    app.router.add_get("/health", health_check)
-
-    setup_application(app, dp, bot=bot)
-
-    # اجرای وب‌سرور
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
-    await site.start()
-
-    print(f">>> سرور روی پورت {PORT} بالا آمد. ربات آماده است!")
-    await asyncio.Event().wait()
-
-
-
-if __name__ == "__main__":
-  asyncio.run(main())
-  
+        order = await conn.fetchrow("SELECT * FROM orders WHERE order_code = $1", order_code)
+        if not order:
+            await messag
