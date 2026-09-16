@@ -776,4 +776,12 @@ async def main():
 
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TC
+    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+    await site.start()
+
+    print(f">>> سرور روی پورت {PORT} بالا آمد. ربات آماده است!")
+    await asyncio.Event().wait()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
