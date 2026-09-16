@@ -351,6 +351,9 @@ async def handle_order_start(callback: types.CallbackQuery):
     await callback.answer()
 
 
+# ==========================================
+# ۶. دریافت تعداد سفارش و پرسیدن کد تخفیف
+# ==========================================
 @dp.message(F.text.regexp(r"^\d+$"))
 async def handle_order_quantity(message: types.Message):
     user_id = message.from_user.id
@@ -379,47 +382,145 @@ async def handle_order_quantity(message: types.Message):
         await message.answer(f"❌ متاسفانه فقط {product['stock']} عدد موجوده.")
         return
 
-    order_code = "ORD-" + "".join(random.choices(string.digits, k=5))
+    # ذخیره‌ی تعداد توی دیتابیس (برای مرحله‌ی بعد)
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            "UPDATE pending_orders SET quantity = $1 WHERE user_id = $2",
+            quantity, user_id
+        )
+    finally:
+        await conn.close()
+
+    await message.answer(
+        f"✅ تعداد ثبت شد: **{quantity}** عدد\n\n"
+        f"🎟️ **کد تخفیف داری؟**\n\n"
+        f"اگه داری، کد رو بنویس و بفرست (مثلاً: `WELCOME10`).\n"
+        f"اگه نداری، بنویس: **ندارم**",
+        parse_mode="Markdown"
+    )
+
+# ==========================================
+# ۱۷. دریافت کد تخفیف (بعد از تعداد)
+# ==========================================
+@dp.message(F.text.func(lambda t: t.strip() != ""))
+async def handle_coupon_input(message: types.Message):
+    user_id = message.from_user.id
+
+    # فقط اگه کاربر سفارش نیمه‌کاره داره
+    pending = await get_pending_order(user_id)
+    if not pending or not pending['quantity']:
+        return
+
+    text = message.text.strip()
+    coupon_code = None
+    discount_percent = 0
+
+    # اگه کاربر نوشت "ندارم"
+    if text == "ندارم":
+        discount_percent = 0
+    else:
+        # چک کردن کد تخفیف
+        coupon = await get_coupon(text.upper())
+        if not coupon:
+            await message.answer(
+                "❌ کد تخفیف نامعتبره!\n\n"
+                "اگه کد دیگه‌ای داری، دوباره بفرست. یا بنویس **ندارم** تا سفارشت بدون تخفیف ثبت بشه.",
+                parse_mode="Markdown"
+            )
+            return
+
+        # چک کردن محدودیت استفاده
+        if coupon['max_uses'] > 0 and coupon['used_count'] >= coupon['max_uses']:
+            await message.answer(
+                "❌ این کد تخفیف به حد مجاز استفاده رسیده!\n\n"
+                "بنویس **ندارم** تا سفارشت بدون تخفیف ثبت بشه.",
+                parse_mode="Markdown"
+            )
+            return
+
+        coupon_code = coupon['code']
+        discount_percent = coupon['discount_percent']
+
+    # گرفتن اطلاعات محصول و تعداد
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow(
+            "SELECT * FROM products WHERE product_id = $1", pending['product_id']
+        )
+    finally:
+        await conn.close()
+
+    if not product:
+        await message.answer("❌ محصول مورد نظر پیدا نشد.")
+        return
+
+    quantity = pending['quantity']
     total_price = product['price'] * quantity
 
+    # محاسبه‌ی تخفیف
+    discount_amount = int(total_price * discount_percent / 100)
+    final_price = total_price - discount_amount
+
+    # ساخت کد سفارش
+    order_code = "ORD-" + "".join(random.choices(string.digits, k=5))
+
+    # ثبت سفارش در دیتابیس
     conn = await get_connection()
     try:
         await conn.execute(
             """INSERT INTO orders (order_code, user_id, product_id, quantity, total_price, status)
                VALUES ($1, $2, $3, $4, $5, $6)""",
-            order_code, user_id, product['product_id'], quantity, total_price, "در انتظار پرداخت"
+            order_code, user_id, product['product_id'], quantity, final_price, "در انتظار پرداخت"
         )
         await conn.execute(
             "UPDATE products SET stock = stock - $1 WHERE product_id = $2",
             quantity, product['product_id']
         )
-        print(f"✅ سفارش {order_code} ثبت شد.")
+
+        # اگه کد تخفیف استفاده شد، تعداد استفادش رو زیاد کن
+        if coupon_code:
+            await conn.execute(
+                "UPDATE coupons SET used_count = used_count + 1 WHERE code = $1",
+                coupon_code
+            )
     finally:
         await conn.close()
 
+    # پاک کردن سفارش نیمه‌کاره
     await delete_pending_order(user_id)
 
+    # ساخت متن رسید
+    if discount_percent > 0:
+        discount_text = (
+            f"\n🎟️ کد تخفیف: `{coupon_code}`\n"
+            f"💸 تخفیف: {discount_percent}% ({discount_amount:,} تومان)\n"
+            f"💰 **مبلغ قابل پرداخت: {final_price:,} تومان**\n"
+        )
+    else:
+        discount_text = f"\n💰 **مبلغ قابل پرداخت: {final_price:,} تومان**\n"
+
     await message.answer(
-        f"✅ **سفارش شما با موفقیت ثبت شد!**\n\n"
+        f"✅ **سفارش شما ثبت شد!**\n\n"
         f"🆔 کد سفارش: `{order_code}`\n"
         f"📦 محصول: {product['name']}\n"
         f"🔢 تعداد: {quantity}\n"
-        f"💰 مبلغ کل: {total_price:,} تومان\n\n"
-        f"💳 **برای تکمیل سفارش، مبلغ {total_price:,} تومان رو به شماره کارت زیر واریز کن:**\n\n"
+        f"💵 مبلغ اصلی: {total_price:,} تومان\n"
+        f"{discount_text}\n"
+        f"💳 **برای تکمیل سفارش، مبلغ {final_price:,} تومان رو به شماره کارت زیر واریز کن:**\n\n"
         f"`{CARD_NUMBER}`\n\n"
         f"📸 بعد از پرداخت، **عکس رسید** رو همین‌جا بفرست.\n\n"
-        f"⏳ وضعیت سفارش: **در انتظار پرداخت**",
+        f"⏳ وضعیت: **در انتظار پرداخت**",
         parse_mode="Markdown"
     )
 
+    # پرسیدن شماره تماس (اگه قبلاً نداده)
     user_info = await get_user_info(user_id)
     if user_info and not user_info['phone_number']:
         await message.answer(
-            "📞 **لطفا شماره خود را وارد کنین :**\n\n"
-            "(مثال: `09123456789`)\n\n"
-            "این اطلاعات برای هماهنگی سفارش و اطلاع‌رسانی تخفیف‌ها استفاده میشه."
+            "📞 **لطفاً شماره تماس خودت رو وارد کن:**\n\n"
+            "(مثال: `09123456789`)"
         )
-
 
 @dp.message(F.text.regexp(r"^09\d{9}$"))
 async def handle_phone_number(message: types.Message):
