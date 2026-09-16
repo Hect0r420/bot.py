@@ -23,8 +23,10 @@ from database import (
 # ==========================================
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ADMIN_ID = 278497678  # 🔴 اینجا آیدی عددی تلگرام خودت رو بذار
-CARD_NUMBER = "6219-8619-4669-5482"  # 🔴 شماره کارت خودت رو اینجا بذار
+ADMIN_ID = int(os.getenv("ADMIN_ID", 0))  # 🟢 اینجا آیدی عددی تلگرام خودت رو بذار
+CARD_NUMBER = "6219-8619-4669-5482"  # 🟢 شماره کارت خودت رو اینجا بذار
+# شماره پشتیبانی
+SUPPORT_PHONE = "09017674604"  # 🟢 شماره پشتیبانی
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
