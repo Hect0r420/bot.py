@@ -68,6 +68,18 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+# جدول کدهای تخفیف
+       await conn.execute("""
+    CREATE TABLE IF NOT EXISTS coupons (
+        coupon_id SERIAL PRIMARY KEY,
+        code TEXT UNIQUE NOT NULL,
+        discount_percent INTEGER NOT NULL,
+        max_uses INTEGER DEFAULT 0,
+        used_count INTEGER DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
 
         print("✅ جدول‌ها و ستون‌ها با موفقیت ساخته/به‌روزرسانی شدن.")
     finally:
