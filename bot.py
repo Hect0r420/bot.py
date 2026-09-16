@@ -412,7 +412,7 @@ async def handle_order_quantity(message: types.Message):
     user_info = await get_user_info(user_id)
     if user_info and not user_info['phone_number']:
         await message.answer(
-            "📞 **09029540420 :**\n\n"
+            "📞 **لطفا شماره خود را وارد کنین :**\n\n"
             "(مثال: `09123456789`)\n\n"
             "این اطلاعات برای هماهنگی سفارش و اطلاع‌رسانی تخفیف‌ها استفاده میشه."
         )
@@ -717,6 +717,44 @@ async def cmd_orders(message: types.Message):
             await message.answer(text[i:i+4000], parse_mode="Markdown")
     else:
         await message.answer(text, parse_mode="Markdown")
+
+# ==========================================
+# ۱۱. دستور استعلام موجودی محصول (ادمین)
+# ==========================================
+@dp.message(Command("stock"))
+async def cmd_stock(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].strip().isdigit():
+        await message.answer(
+            "❌ فرمت اشتباهه!\n\n**مثال:**\n`/stock 3`",
+            parse_mode="Markdown"
+        )
+        return
+
+    product_id = int(parts[1].strip())
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", product_id)
+    finally:
+        await conn.close()
+
+    if not product:
+        await message.answer(f"❌ محصولی با آیدی `{product_id}` پیدا نشد.", parse_mode="Markdown")
+        return
+
+    await message.answer(
+        f"📦 **اطلاعات محصول**\n\n"
+        f"🆔 کد: `{product['product_id']}`\n"
+        f"📛 نام: {product['name']}\n"
+        f"💰 قیمت: {product['price']:,} تومان\n"
+        f"📊 موجودی: {product['stock']} عدد\n"
+        f"🏷️ دسته: {product['category'] or 'متفرقه'}",
+        parse_mode="Markdown"
+    )
 
 
 # ==========================================
