@@ -1104,6 +1104,8 @@ async def cmd_admin(message: types.Message):
     admin_help = (
     "👑 **پنل مدیریت هکتور آنلاین شاپ**\n\n"
     "در اینجا لیست تمام دستورات مدیریتی موجود قرار دارد:\n\n"
+    "👑 **پنل گرافیکی:**\n"
+    "• `/admin_panel` → باز کردن پنل مدیریت با دکمه‌های شیشه‌ای\n\n"
     "📦 **مدیریت محصولات:**\n"
     "• `/add_product` → افزودن محصول جدید\n"
     "• `/stock [کد محصول]` → مشاهده اطلاعات یک محصول\n"
@@ -1112,8 +1114,8 @@ async def cmd_admin(message: types.Message):
     "• `/delete_product [کد محصول]` → حذف کامل محصول\n\n"
     "🛒 **مدیریت سفارشات:**\n"
     "• `/orders` → مشاهده‌ی ۲۰ سفارش آخر\n"
-    "• `/confirm_order [کد سفارش]` → تایید پرداخت سفارش\n"
-    "• `/manage_order [کد سفارش]` → مدیریت کامل وضعیت سفارش (در حال پردازش، ارسال شده، تحویل داده شده، لغو)\n\n"
+    "• `/manage_order [کد سفارش]` → مدیریت کامل وضعیت سفارش\n"
+    "• `/confirm_order [کد سفارش]` → تایید سریع پرداخت\n\n"
     "👥 **مدیریت کاربران:**\n"
     "• `/users` → مشاهده‌ی لیست کاربران\n\n"
     "🎟️ **مدیریت کدهای تخفیف:**\n"
@@ -1635,6 +1637,448 @@ async def handle_set_status(callback: types.CallbackQuery):
         parse_mode="Markdown"
     )
     await callback.answer(f"✅ وضعیت به «{new_status}» تغییر یافت.")
+
+# ==========================================
+# ۲۶. پنل ادمین با دکمه‌های شیشه‌ای
+# ==========================================
+@dp.message(Command("admin_panel"))
+async def cmd_admin_panel(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی دسترسی به این پنل را ندارید.")
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products"),
+            ],
+            [
+                InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders"),
+            ],
+            [
+                InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users"),
+            ],
+            [
+                InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons"),
+            ],
+            [
+                InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats"),
+            ],
+            [
+                InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close"),
+            ],
+        ]
+    )
+
+    await message.answer(
+        "👑 **پنل مدیریت هکتور آنلاین شاپ**\n\n"
+        "خوش آمدی مدیر عزیز! 😊\n"
+        "لطفاً یکی از بخش‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+
+
+# ---------- زیرمنوی محصولات ----------
+@dp.callback_query(F.data == "admin_products")
+async def admin_products_menu(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="➕ افزودن محصول", callback_data="admin_add_product_help")],
+            [InlineKeyboardButton(text="📋 لیست محصولات", callback_data="admin_list_products")],
+            [InlineKeyboardButton(text="🔍 اطلاعات یک محصول", callback_data="admin_stock_help")],
+            [InlineKeyboardButton(text="➕ افزایش موجودی", callback_data="admin_add_stock_help")],
+            [InlineKeyboardButton(text="❌ حذف محصول", callback_data="admin_delete_product_help")],
+            [InlineKeyboardButton(text="🔙 بازگشت", callback_data="admin_back")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "📦 **مدیریت محصولات**\n\n"
+        "لطفاً یکی از گزینه‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- راهنمای افزودن محصول ----------
+@dp.callback_query(F.data == "admin_add_product_help")
+async def admin_add_product_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "🛒 **افزودن محصول جدید**\n\n"
+        "لطفاً اطلاعات محصول رو به این ترتیب و با **کاما (`,`)** از هم جدا کن و بفرست:\n\n"
+        "`نام محصول, قیمت, موجودی, دسته‌بندی, لینک عکس`\n\n"
+        "**مثال:**\n"
+        "`هدفون بی‌سیم, 850000, 10, لوازم جانبی, https://example.com/image.jpg`\n\n"
+        "⚠️ اگه عکس نداری، جای لینک عکس بنویس: `-`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- لیست محصولات ----------
+@dp.callback_query(F.data == "admin_list_products")
+async def admin_list_products(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    conn = await get_connection()
+    try:
+        products = await conn.fetch("SELECT * FROM products ORDER BY product_id")
+    finally:
+        await conn.close()
+
+    if not products:
+        await callback.message.answer("📦 هیچ محصولی ثبت نشده.")
+        await callback.answer()
+        return
+
+    text = f"📦 **لیست محصولات** (تعداد: {len(products)})\n\n"
+    for p in products:
+        text += (
+            f"🆔 `{p['product_id']}` | **{p['name']}**\n"
+            f"💰 {p['price']:,} تومان | 📦 موجودی: {p['stock']}\n"
+            f"🏷️ {p['category'] or 'متفرقه'}\n"
+            f"─────────────\n"
+        )
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await callback.message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await callback.message.answer(text, parse_mode="Markdown")
+    await callback.answer()
+
+
+# ---------- راهنمای استعلام موجودی ----------
+@dp.callback_query(F.data == "admin_stock_help")
+async def admin_stock_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "🔍 **استعلام موجودی**\n\n"
+        "دستور رو با کد محصول بفرست:\n\n"
+        "**مثال:**\n"
+        "`/stock 1`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- راهنمای افزایش موجودی ----------
+@dp.callback_query(F.data == "admin_add_stock_help")
+async def admin_add_stock_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "➕ **افزایش موجودی**\n\n"
+        "دستور رو با کد محصول و تعداد بفرست:\n\n"
+        "**مثال:**\n"
+        "`/add_stock 1 10`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- راهنمای حذف محصول ----------
+@dp.callback_query(F.data == "admin_delete_product_help")
+async def admin_delete_product_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "❌ **حذف محصول**\n\n"
+        "دستور رو با کد محصول بفرست:\n\n"
+        "**مثال:**\n"
+        "`/delete_product 1`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- زیرمنوی سفارشات ----------
+@dp.callback_query(F.data == "admin_orders")
+async def admin_orders_menu(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 آخرین سفارشات", callback_data="admin_list_orders")],
+            [InlineKeyboardButton(text="🔧 مدیریت سفارش", callback_data="admin_manage_order_help")],
+            [InlineKeyboardButton(text="🔙 بازگشت", callback_data="admin_back")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "🛒 **مدیریت سفارشات**\n\n"
+        "لطفاً یکی از گزینه‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- لیست سفارشات ----------
+@dp.callback_query(F.data == "admin_list_orders")
+async def admin_list_orders(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    conn = await get_connection()
+    try:
+        orders = await conn.fetch(
+            """SELECT o.*, u.first_name, p.name as product_name
+               FROM orders o
+               LEFT JOIN users u ON o.user_id = u.user_id
+               LEFT JOIN products p ON o.product_id = p.product_id
+               ORDER BY o.created_at DESC LIMIT 20"""
+        )
+    finally:
+        await conn.close()
+
+    if not orders:
+        await callback.message.answer("📦 هیچ سفارشی ثبت نشده.")
+        await callback.answer()
+        return
+
+    text = f"📦 **۲۰ سفارش آخر** (تعداد: {len(orders)})\n\n"
+    for o in orders:
+        text += (
+            f"🆔 `{o['order_code']}`\n"
+            f"👤 {o['first_name'] or 'نامشخص'}\n"
+            f"📦 {o['product_name'] or 'نامشخص'}\n"
+            f"💰 {o['total_price']:,} تومان | 📊 {o['status']}\n"
+            f"─────────────\n"
+        )
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await callback.message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await callback.message.answer(text, parse_mode="Markdown")
+    await callback.answer()
+
+
+# ---------- راهنمای مدیریت سفارش ----------
+@dp.callback_query(F.data == "admin_manage_order_help")
+async def admin_manage_order_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "🔧 **مدیریت سفارش**\n\n"
+        "دستور رو با کد سفارش بفرست:\n\n"
+        "**مثال:**\n"
+        "`/manage_order ORD-12345`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- زیرمنوی کاربران ----------
+@dp.callback_query(F.data == "admin_users")
+async def admin_users_menu(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    conn = await get_connection()
+    try:
+        users = await conn.fetch("SELECT * FROM users ORDER BY joined_at DESC")
+    finally:
+        await conn.close()
+
+    if not users:
+        await callback.message.answer("👥 هیچ کاربری ثبت نشده.")
+        await callback.answer()
+        return
+
+    text = f"👥 **لیست کاربران** (تعداد: {len(users)})\n\n"
+    for u in users[:20]:
+        phone = u['phone_number'] or "❌"
+        text += (
+            f"🔹 **{u['first_name']}**\n"
+            f"🆔 `{u['user_id']}`\n"
+            f"📞 `{phone}`\n"
+            f"─────────────\n"
+        )
+
+    if len(users) > 20:
+        text += f"\n... و {len(users) - 20} کاربر دیگه."
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await callback.message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await callback.message.answer(text, parse_mode="Markdown")
+    await callback.answer()
+
+
+# ---------- زیرمنوی کدهای تخفیف ----------
+@dp.callback_query(F.data == "admin_coupons")
+async def admin_coupons_menu(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📋 لیست کدها", callback_data="admin_list_coupons")],
+            [InlineKeyboardButton(text="➕ افزودن کد", callback_data="admin_add_coupon_help")],
+            [InlineKeyboardButton(text="🔙 بازگشت", callback_data="admin_back")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "🎟️ **مدیریت کدهای تخفیف**\n\n"
+        "لطفاً یکی از گزینه‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- لیست کدهای تخفیف ----------
+@dp.callback_query(F.data == "admin_list_coupons")
+async def admin_list_coupons(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    coupons = await get_all_coupons()
+
+    if not coupons:
+        await callback.message.answer("🎟️ هیچ کد تخفیفی ثبت نشده.")
+        await callback.answer()
+        return
+
+    text = f"🎟️ **لیست کدهای تخفیف** (تعداد: {len(coupons)})\n\n"
+    for c in coupons:
+        status = "✅ فعال" if c['is_active'] else "❌ غیرفعال"
+        max_uses = "نامحدود" if c['max_uses'] == 0 else c['max_uses']
+        text += (
+            f"🎫 کد: `{c['code']}`\n"
+            f"💰 تخفیف: {c['discount_percent']}%\n"
+            f"🔢 استفاده: {c['used_count']}/{max_uses}\n"
+            f"📊 {status}\n"
+            f"─────────────\n"
+        )
+
+    if len(text) > 4000:
+        for i in range(0, len(text), 4000):
+            await callback.message.answer(text[i:i+4000], parse_mode="Markdown")
+    else:
+        await callback.message.answer(text, parse_mode="Markdown")
+    await callback.answer()
+
+
+# ---------- راهنمای افزودن کد تخفیف ----------
+@dp.callback_query(F.data == "admin_add_coupon_help")
+async def admin_add_coupon_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "➕ **افزودن کد تخفیف**\n\n"
+        "دستور رو با فرمت زیر بفرست:\n\n"
+        "`/add_coupon کد درصد [حداکثر استفاده]`\n\n"
+        "**مثال:**\n"
+        "`/add_coupon WELCOME10 10`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- آمار ربات ----------
+@dp.callback_query(F.data == "admin_stats")
+async def admin_stats(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    conn = await get_connection()
+    try:
+        user_count = await conn.fetchval("SELECT COUNT(*) FROM users")
+        product_count = await conn.fetchval("SELECT COUNT(*) FROM products")
+        order_count = await conn.fetchval("SELECT COUNT(*) FROM orders")
+        pending_count = await conn.fetchval("SELECT COUNT(*) FROM orders WHERE status = 'در انتظار پرداخت'")
+        total_sales = await conn.fetchval(
+            "SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE status != 'لغو شده'"
+        )
+    finally:
+        await conn.close()
+
+    await callback.message.answer(
+        f"📊 **آمار کلی ربات**\n\n"
+        f"👥 تعداد کاربران: `{user_count}`\n"
+        f"📦 تعداد محصولات: `{product_count}`\n"
+        f"🛒 تعداد سفارشات: `{order_count}`\n"
+        f"⏳ سفارشات در انتظار: `{pending_count}`\n"
+        f"💰 مجموع فروش: `{total_sales:,}` تومان",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- بازگشت به منوی اصلی ادمین ----------
+@dp.callback_query(F.data == "admin_back")
+async def admin_back(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products")],
+            [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
+            [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
+            [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
+            [InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
+        ]
+    )
+
+    await callback.message.edit_text(
+        "👑 **پنل مدیریت هکتور آنلاین شاپ**\n\n"
+        "لطفاً یکی از بخش‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# ---------- بستن پنل ----------
+@dp.callback_query(F.data == "admin_close")
+async def admin_close(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "✅ پنل مدیریت بسته شد.\n\n"
+        "برای باز کردن مجدد، دستور `/admin_panel` رو بزن."
+    )
+    await callback.answer()
 
 # ==========================================
 # ۲۰. تخفیف ویژه تولد
