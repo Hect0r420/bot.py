@@ -91,8 +91,8 @@ async def init_db():
 """)
 
 # اضافه کردن ستون user_id به جدول coupons (برای کدهای اختصاصی)
-await conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS user_id BIGINT")
-await conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP")
+        await conn.execute("ALTER TABLE coupons         ADD COLUMN IF NOT EXISTS user_id BIGINT")
+        await conn.execute("ALTER TABLE coupons  ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP")
 
         print("✅ جدول‌ها و ستون‌ها با موفقیت ساخته/به‌روزرسانی شدن.")
     finally:
