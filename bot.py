@@ -788,7 +788,7 @@ async def handle_coupon_input(message: types.Message):
     )
      # 🟢 اطلاع‌رسانی به ادمین
     try:
-    await bot.send_message(
+        await bot.send_message(
         chat_id=ADMIN_ID,
         text=(
             f"🔔 **سفارش جدید ثبت شد!**\n\n"
