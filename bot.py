@@ -48,15 +48,32 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ==========================================
 # ۲. بخش ارتباط با هوش مصنوعی (با آگاهی از محصولات)
-# ==========================================
 # ۲۲. تابع دریافت پاسخ از AI (با مدیریت خطا)
 # ۲۲. تابع دریافت پاسخ از AI (با دیباگ)
+# ۲۲. تابع دریافت پاسخ از AI (Groq + Gemini Fallback)
 # ==========================================
-async def get_ai_response_async(user_message: str) -> str:
-    """گرفتن پاسخ از AI با در نظر گرفتن محصولات موجود"""
-    try:
-        print(f"🔍 DEBUG: درخواست AI برای پیام: {user_message}")
+from groq import Groq
 
+# کلید Groq از محیط خونده میشه
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
+
+# لیست مدل‌ها به ترتیب اولویت
+AI_MODELS = [
+    {"provider": "groq", "model": "llama-3.3-70b-versatile"},
+    {"provider": "gemini", "model": "gemini-2.0-flash"},
+    {"provider": "gemini", "model": "gemini-2.0-flash-lite"},
+    {"provider": "gemini", "model": "gemini-1.5-flash"},
+    {"provider": "gemini", "model": "gemini-3.6-flash"},  # 🟢 آخرین راه‌حل
+]
+
+
+async def get_ai_response_async(user_message: str) -> str:
+    """گرفتن پاسخ از AI با سیستم Fallback (Groq → Gemini)"""
+    last_error = None
+
+    # ۱. گرفتن لیست محصولات از دیتابیس
+    try:
         conn = await get_connection()
         try:
             products = await conn.fetch(
@@ -65,50 +82,74 @@ async def get_ai_response_async(user_message: str) -> str:
         finally:
             await conn.close()
 
-        print(f"🔍 DEBUG: تعداد محصولات: {len(products)}")
-
         if products:
             products_text = "\n\n📦 **لیست محصولات موجود:**\n"
             for p in products:
-                products_text += f"- {p['name']} | {p['price']:,} تومان | موجودی: {p['stock']}\n"
+                products_text += f"- {p['name']} | قیمت: {p['price']:,} تومان | موجودی: {p['stock']} عدد\n"
         else:
             products_text = "\n\n⚠️ هیچ محصولی موجود نیست.\n"
 
         full_message = f"{user_message}\n{products_text}"
 
-        print(f"🔍 DEBUG: ارسال به Gemini...")
-
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(
-            None, lambda: ai_client.models.generate_content(
-                model="gemini-3.6-flash",
-                contents=full_message,
-                config=genai_types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION
-                ),
-            )
-        )
-
-        print(f"✅ DEBUG: پاسخ از AI دریافت شد.")
-        return response.text
-
     except Exception as e:
-        error_str = str(e)
-        print(f"❌ DEBUG: خطای AI: {error_str}")
+        print(f"❌ خطا در دریافت محصولات: {e}")
+        full_message = user_message
 
-        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-            return (
-                "🙏 **ظرفیت هوش مصنوعی تکمیل شده.**\n\n"
-                "⏳ لطفاً چند دقیقه دیگه دوباره تلاش کنید.\n\n"
-                f"📞 یا با پشتیبانی تماس بگیرید: `{SUPPORT_PHONE}`"
-            )
-        elif "API_KEY" in error_str or "invalid" in error_str.lower():
-            return "⚠️ مشکل در کلید API. لطفاً به ادمین اطلاع بدید."
-        else:
-            return (
-                "😔 **متاسفانه در حال حاضر نمی‌تونم جواب بدم.**\n\n"
-                f"📞 با پشتیبانی تماس بگیر: `{SUPPORT_PHONE}`"
-            )
+    # ۲. امتحان کردن مدل‌ها به ترتیب
+    loop = asyncio.get_running_loop()
+
+    for model_info in AI_MODELS:
+        provider = model_info["provider"]
+        model_name = model_info["model"]
+
+        try:
+            print(f"🔍 تلاش با {provider} - {model_name}")
+
+            if provider == "groq":
+                if not groq_client:
+                    print("⚠️ Groq API Key تنظیم نشده، رد میشه.")
+                    continue
+
+                response = await loop.run_in_executor(
+                    None, lambda: groq_client.chat.completions.create(
+                        model=model_name,
+                        messages=[
+                            {"role": "system", "content": SYSTEM_INSTRUCTION},
+                            {"role": "user", "content": full_message},
+                        ],
+                        temperature=0.7,
+                        max_tokens=1024,
+                    )
+                )
+                print(f"✅ پاسخ از Groq ({model_name}) دریافت شد.")
+                return response.choices[0].message.content
+
+            elif provider == "gemini":
+                response = await loop.run_in_executor(
+                    None, lambda: ai_client.models.generate_content(
+                        model=model_name,
+                        contents=full_message,
+                        config=genai_types.GenerateContentConfig(
+                            system_instruction=SYSTEM_INSTRUCTION
+                        ),
+                    )
+                )
+                print(f"✅ پاسخ از Gemini ({model_name}) دریافت شد.")
+                return response.text
+
+        except Exception as e:
+            error_str = str(e)
+            print(f"❌ {provider} ({model_name}) خطا داد: {error_str}")
+            last_error = error_str
+            continue  # برو سراغ مدل بعدی
+
+    # ۳. اگه همه‌ی مدل‌ها خطا دادن
+    print(f"❌ همه‌ی مدل‌ها خطا دادن. آخرین خطا: {last_error}")
+    return (
+        "🙏 **متاسفانه در حال حاضر ظرفیت پاسخگویی هوش مصنوعی تکمیل شده است.**\n\n"
+        "⏳ لطفاً چند دقیقه دیگه دوباره تلاش کنید.\n\n"
+        f"📞 یا با پشتیبانی تماس بگیرید: `{SUPPORT_PHONE}`"
+    )
 
 
 # ==========================================
