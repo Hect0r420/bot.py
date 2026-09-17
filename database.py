@@ -388,3 +388,59 @@ async def update_order_status(order_code: str, new_status: str):
         print(f"✅ وضعیت سفارش {order_code} به '{new_status}' تغییر یافت.")
     finally:
         await conn.close()
+
+async def get_user_orders(user_id: int):
+    """گرفتن سفارشات یک کاربر (فقط سفارشات فعال)"""
+    conn = await get_connection()
+    try:
+        rows = await conn.fetch(
+            """SELECT o.*, p.name as product_name
+               FROM orders o
+               LEFT JOIN products p ON o.product_id = p.product_id
+               WHERE o.user_id = $1 
+               AND o.status NOT IN ('تحویل داده شده', 'لغو شده')
+               ORDER BY o.created_at DESC""",
+            user_id
+        )
+        return rows
+    finally:
+        await conn.close()
+
+
+async def cancel_order(order_code: str):
+    """لغو سفارش و برگرداندن موجودی محصول"""
+    conn = await get_connection()
+    try:
+        order = await conn.fetchrow(
+            "SELECT * FROM orders WHERE order_code = $1", order_code
+        )
+        if not order:
+            return None
+
+        await conn.execute(
+            "UPDATE orders SET status = 'لغو شده' WHERE order_code = $1",
+            order_code
+        )
+
+        await conn.execute(
+            "UPDATE products SET stock = stock + $1 WHERE product_id = $2",
+            order['quantity'], order['product_id']
+        )
+
+        print(f"✅ سفارش {order_code} لغو شد و موجودی برگشت.")
+        return order
+    finally:
+        await conn.close()
+
+
+async def update_order_status(order_code: str, new_status: str):
+    """تغییر وضعیت سفارش توسط ادمین"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            "UPDATE orders SET status = $1 WHERE order_code = $2",
+            new_status, order_code
+        )
+        print(f"✅ وضعیت سفارش {order_code} به '{new_status}' تغییر یافت.")
+    finally:
+        await conn.close()
