@@ -79,6 +79,16 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        # جدول سبد خرید
+        await conn.execute("""
+    CREATE TABLE IF NOT EXISTS cart_items (
+        cart_id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        product_id INTEGER NOT NULL,
+        quantity INTEGER NOT NULL,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
 
         print("✅ جدول‌ها و ستون‌ها با موفقیت ساخته/به‌روزرسانی شدن.")
     finally:
