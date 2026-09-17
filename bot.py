@@ -1493,11 +1493,10 @@ async def check_birthdays():
 
     except Exception as e:
         print(f"❌ خطا در چک کردن تولدها: {e}")
-
 # ==========================================
 # ۲۱. جستجوی محصول
 # ==========================================
-@dp.message(F.text.regexp(r"^جستجو\s+.+$"))
+@dp.message(F.text.startswith("جستجو"))
 async def handle_search(message: types.Message):
     # گرفتن متن جستجو
     search_query = message.text.replace("جستجو", "").strip()
