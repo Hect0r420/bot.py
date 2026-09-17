@@ -1651,16 +1651,17 @@ async def cmd_admin_panel(message: types.Message):
         return
 
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products")],
-            [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
-            [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
-            [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
-            [InlineKeyboardButton(text="📢 ارسال پیام همگانی", callback_data="admin_broadcast_help")],
-            [InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats")],
-            [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
-        ]
-    )
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products")],
+        [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
+        [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
+        [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
+        [InlineKeyboardButton(text="📢 ارسال پیام همگانی", callback_data="admin_broadcast_help")],
+        [InlineKeyboardButton(text="📊 گزارش فروش", callback_data="admin_report_help")],
+        [InlineKeyboardButton(text="📈 آمار ربات", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
+    ]
+)
 
     await message.answer(
         "👑 **پنل مدیریت هکتور آنلاین شاپ**\n\n"
@@ -2048,6 +2049,22 @@ async def admin_stats(callback: types.CallbackQuery):
     await callback.answer()
 
 
+# ---------- راهنمای گزارش فروش ----------
+@dp.callback_query(F.data == "admin_report_help")
+async def admin_report_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "📊 **گزارش فروش پیشرفته**\n\n"
+        "برای مشاهده‌ی گزارش، دستور زیر رو بزن:\n\n"
+        "`/report`\n\n"
+        "بعدش می‌تونی بازه‌ی زمانی رو انتخاب کنی.",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
 # ---------- بازگشت به منوی اصلی ادمین ----------
 @dp.callback_query(F.data == "admin_back")
 async def admin_back(callback: types.CallbackQuery):
@@ -2056,16 +2073,17 @@ async def admin_back(callback: types.CallbackQuery):
         return
 
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products")],
-            [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
-            [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
-            [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
-            [InlineKeyboardButton(text="📢 ارسال پیام همگانی", callback_data="admin_broadcast_help")],
-            [InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats")],
-            [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
-        ]
-    )
+    inline_keyboard=[
+        [InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products")],
+        [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
+        [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
+        [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
+        [InlineKeyboardButton(text="📢 ارسال پیام همگانی", callback_data="admin_broadcast_help")],
+        [InlineKeyboardButton(text="📊 گزارش فروش", callback_data="admin_report_help")],
+        [InlineKeyboardButton(text="📈 آمار ربات", callback_data="admin_stats")],
+        [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
+    ]
+)
 
     await callback.message.edit_text(
         "👑 **پنل مدیریت هکتور آنلاین شاپ**\n\n"
@@ -2126,7 +2144,133 @@ async def cmd_cancel_broadcast(message: types.Message):
 
     await message.answer("❌ ارسال پیام همگانی لغو شد.")
 
+# ==========================================
+# ۲۸. گزارش فروش پیشرفته (ادمین)
+# ==========================================
+@dp.message(Command("report"))
+async def cmd_report(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
 
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📅 امروز", callback_data="report_today")],
+            [InlineKeyboardButton(text="📅 ۷ روز اخیر", callback_data="report_7days")],
+            [InlineKeyboardButton(text="📅 ۳۰ روز اخیر", callback_data="report_30days")],
+            [InlineKeyboardButton(text="📅 کل", callback_data="report_all")],
+        ]
+    )
+
+    await message.answer(
+        "📊 **گزارش فروش پیشرفته**\n\n"
+        "لطفاً بازه‌ی زمانی مورد نظر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
+
+
+@dp.callback_query(F.data.startswith("report_"))
+async def handle_report(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    period = callback.data.replace("report_", "")
+
+    from datetime import datetime, timedelta
+
+    # تعیین بازه‌ی زمانی
+    if period == "today":
+        start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        period_name = "امروز"
+    elif period == "7days":
+        start_date = datetime.now() - timedelta(days=7)
+        period_name = "۷ روز اخیر"
+    elif period == "30days":
+        start_date = datetime.now() - timedelta(days=30)
+        period_name = "۳۰ روز اخیر"
+    else:  # all
+        start_date = datetime(2000, 1, 1)
+        period_name = "کل"
+
+    conn = await get_connection()
+    try:
+        # آمار کلی
+        total_orders = await conn.fetchval(
+            "SELECT COUNT(*) FROM orders WHERE created_at >= $1",
+            start_date
+        )
+        total_sales = await conn.fetchval(
+            "SELECT COALESCE(SUM(total_price), 0) FROM orders WHERE created_at >= $1 AND status != 'لغو شده'",
+            start_date
+        )
+        new_users = await conn.fetchval(
+            "SELECT COUNT(*) FROM users WHERE joined_at >= $1",
+            start_date
+        )
+
+        # آمار بر اساس وضعیت
+        status_counts = await conn.fetch(
+            """SELECT status, COUNT(*) as count 
+               FROM orders WHERE created_at >= $1 
+               GROUP BY status""",
+            start_date
+        )
+
+        # پرفروش‌ترین محصولات
+        top_products = await conn.fetch(
+            """SELECT p.name, SUM(o.quantity) as total_qty, SUM(o.total_price) as total_price
+               FROM orders o
+               LEFT JOIN products p ON o.product_id = p.product_id
+               WHERE o.created_at >= $1 AND o.status != 'لغو شده'
+               GROUP BY p.name
+               ORDER BY total_qty DESC
+               LIMIT 5""",
+            start_date
+        )
+    finally:
+        await conn.close()
+
+    # ساخت متن گزارش
+    report_text = (
+        f"📊 **گزارش فروش ({period_name})**\n"
+        f"📅 از: {start_date.strftime('%Y-%m-%d')}\n\n"
+        f"💰 **آمار کلی:**\n"
+        f"• تعداد سفارشات: `{total_orders}`\n"
+        f"• مجموع فروش: `{total_sales:,}` تومان\n"
+        f"• کاربران جدید: `{new_users}`\n\n"
+    )
+
+    # میانگین فروش
+    if total_orders > 0:
+        avg_order = total_sales // total_orders
+        report_text += f"• میانگین هر سفارش: `{avg_order:,}` تومان\n\n"
+
+    # آمار بر اساس وضعیت
+    if status_counts:
+        report_text += "📊 **سفارشات بر اساس وضعیت:**\n"
+        for s in status_counts:
+            report_text += f"• {s['status']}: `{s['count']}`\n"
+        report_text += "\n"
+
+    # پرفروش‌ترین محصولات
+    if top_products:
+        report_text += "🏆 **پرفروش‌ترین محصولات:**\n"
+        for i, p in enumerate(top_products, 1):
+            report_text += (
+                f"{i}. {p['name'] or 'نامشخص'}\n"
+                f"   🔢 {p['total_qty']} عدد | 💰 {p['total_price']:,} تومان\n"
+            )
+
+    # ارسال گزارش
+    if len(report_text) > 4000:
+        for i in range(0, len(report_text), 4000):
+            await callback.message.answer(report_text[i:i+4000], parse_mode="Markdown")
+    else:
+        await callback.message.answer(report_text, parse_mode="Markdown")
+
+    await callback.answer()
 
 # ==========================================
 # ۲۰. تخفیف ویژه تولد
