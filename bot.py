@@ -1020,10 +1020,14 @@ async def cmd_admin(message: types.Message):
     "• `/add_coupon [کد] [درصد] [حداکثر استفاده]` → افزودن کد تخفیف\n"
     "• `/coupons` → مشاهده‌ی لیست کدهای تخفیف\n"
     "• `/delete_coupon [کد]` → حذف کد تخفیف\n\n"
-    "🎂 **تخفیف تولد:**\n"
-    "• (به صورت خودکار هر روز ساعت ۹ صبح اجرا میشه)\n\n"
+     
     "📊 **آمار:**\n"
     "• `/stats` → مشاهده‌ی آمار کلی ربات\n\n"
+    #بدون دستور 
+    "🔍 **جستجو:**\n"
+    "• (مشتری‌ها می‌تونن با نوشتن «جستجو [اسم محصول]» محصول مورد نظرشون رو پیدا کنن)\n\n"
+    "🎂 **تخفیف تولد:**\n"
+    "• (به صورت خودکار هر روز ساعت ۹ صبح اجرا میشه)\n\n"
     "💡 **نکته:** برای دیدن جزئیات هر دستور، فقط خود دستور رو بدون آرگومان بفرست (مثلاً `/stock`) تا راهنماش بیاد."
 )
     await message.answer(admin_help, parse_mode="Markdown")
@@ -1489,6 +1493,80 @@ async def check_birthdays():
 
     except Exception as e:
         print(f"❌ خطا در چک کردن تولدها: {e}")
+
+# ==========================================
+# ۲۱. جستجوی محصول
+# ==========================================
+@dp.message(F.text.regexp(r"^جستجو\s+.+$"))
+async def handle_search(message: types.Message):
+    # گرفتن متن جستجو
+    search_query = message.text.replace("جستجو", "").strip()
+
+    if not search_query:
+        await message.answer(
+            "🔍 **جستجوی محصول**\n\n"
+            "لطفاً بعد از کلمه‌ی «جستجو»، اسم محصول رو بنویس.\n\n"
+            "**مثال:**\n"
+            "`جستجو تیشرت`",
+            parse_mode="Markdown"
+        )
+        return
+
+    conn = await get_connection()
+    try:
+        products = await conn.fetch(
+            """SELECT * FROM products 
+               WHERE stock > 0 
+               AND (name ILIKE $1 OR category ILIKE $1)
+               ORDER BY product_id""",
+            f"%{search_query}%"
+        )
+    finally:
+        await conn.close()
+
+    if not products:
+        await message.answer(
+            f"🔍 **نتیجه‌ای برای «{search_query}» پیدا نشد!**\n\n"
+            f"😔 متاسفانه محصولی با این اسم موجود نیست.\n\n"
+            f"💡 می‌تونی از دکمه‌ی «🛒 مشاهده محصولات» استفاده کنی یا با پشتیبانی تماس بگیری.",
+            parse_mode="Markdown"
+        )
+        return
+
+    await message.answer(
+        f"🔍 **نتایج جستجو برای «{search_query}»** (تعداد: {len(products)})\n\n"
+        f"👇 محصولات پیدا شده:",
+        parse_mode="Markdown"
+    )
+
+    for p in products:
+        caption = (
+            f"🔹 **{p['name']}**\n"
+            f"💰 قیمت: {p['price']:,} تومان\n"
+            f"📦 موجودی: {p['stock']} عدد\n"
+            f"🏷️ دسته‌بندی: {p['category'] or 'متفرقه'}"
+        )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="➕ افزودن به سبد", callback_data=f"addcart_{p['product_id']}")]
+            ]
+        )
+        if p['image_url']:
+            try:
+                await message.answer_photo(
+                    photo=p['image_url'],
+                    caption=caption,
+                    reply_markup=keyboard,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                await message.answer(
+                    caption + "\n\n⚠️ (عکس در دسترس نیست)",
+                    reply_markup=keyboard,
+                    parse_mode="Markdown"
+                )
+        else:
+            await message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
 
 # ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
