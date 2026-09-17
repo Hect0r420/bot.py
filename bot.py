@@ -336,60 +336,45 @@ async def back_to_start(callback: types.CallbackQuery):
 # ۵. مشاهده محصولات (با عکس و دکمه‌ی سبد)
 # ۵.۱. مشاهده همه محصولات (بدون دسته‌بندی)
 # ==========================================
-@dp.callback_query(F.data == "all_products")
-async def handle_all_products(callback: types.CallbackQuery):
+@dp.callback_query(F.data == "products")
+async def handle_products(callback: types.CallbackQuery):
     conn = await get_connection()
     try:
-        products = await conn.fetch("SELECT * FROM products WHERE stock > 0 ORDER BY product_id")
+        categories = await conn.fetch(
+            """SELECT DISTINCT category FROM products 
+               WHERE stock > 0 AND category IS NOT NULL AND category != ''
+               ORDER BY category"""
+        )
     finally:
         await conn.close()
 
-    if not products:
-        await callback.message.answer("😔 در حال حاضر هیچ محصولی موجود نیست.")
+    if not categories:
+        await callback.message.answer(
+            "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
+            "😔 در حال حاضر هیچ محصولی موجود نیست.\n\n"
+            "📞 برای اطلاع از موجودی، با پشتیبانی تماس بگیرید."
+        )
         await callback.answer()
         return
 
-    for p in products:
-        caption = (
-            f"🔹 **{p['name']}**\n"
-            f"💰 قیمت: {p['price']:,} تومان\n"
-            f"📦 موجودی: {p['stock']} عدد\n"
-            f"🏷️ دسته‌بندی: {p['category'] or 'متفرقه'}"
-        )
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="➕ افزودن به سبد", callback_data=f"addcart_{p['product_id']}")]
-            ]
-        )
-        if p['image_url']:
-            try:
-                await callback.message.answer_photo(
-                    photo=p['image_url'],
-                    caption=caption,
-                    reply_markup=keyboard,
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                print(f"❌ خطا در ارسال عکس {p['name']}: {e}")
-                await callback.message.answer(
-                    caption + "\n\n⚠️ (عکس این محصول در دسترس نیست)",
-                    reply_markup=keyboard,
-                    parse_mode="Markdown"
-                )
-        else:
-            await callback.message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
+    buttons = []
+    for row in categories:
+        cat = row['category']
+        buttons.append([InlineKeyboardButton(text=f"📂 {cat}", callback_data=f"cat_{cat}")])
+
+    buttons.append([InlineKeyboardButton(text="🛍️ مشاهده همه محصولات", callback_data="all_products")])
+    buttons.append([InlineKeyboardButton(text="🛒 مشاهده سبد خرید", callback_data="view_cart")])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     await callback.message.answer(
-        "🛒 برای دیدن سبد خریدت، روی دکمه‌ی زیر بزن:",
-        reply_markup=InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🛒 مشاهده سبد خرید", callback_data="view_cart")]
-            ]
-        )
+        "📂 **دسته‌بندی محصولات**\n\n"
+        "لطفاً یکی از دسته‌های زیر رو انتخاب کن: 👇",
+        reply_markup=keyboard,
+        parse_mode="Markdown"
     )
 
     await callback.answer()
-
 # ==========================================
 # ۱۸. مدیریت سبد خرید
 # ==========================================
