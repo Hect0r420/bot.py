@@ -2072,6 +2072,7 @@ async def admin_back(callback: types.CallbackQuery):
             [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
             [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
             [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
+            [InlineKeyboardButton(text="📢 ارسال پیام همگانی", callback_data="admin_broadcast_help")],
             [InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats")],
             [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
         ]
