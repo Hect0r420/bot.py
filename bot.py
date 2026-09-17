@@ -1361,6 +1361,69 @@ async def cmd_delete_coupon(message: types.Message):
     )
 
 # ==========================================
+# ۱۹. افزایش موجودی محصول (ادمین)
+# ==========================================
+@dp.message(Command("add_stock"))
+async def cmd_add_stock(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    parts = message.text.split()
+    if len(parts) != 3:
+        await message.answer(
+            "❌ فرمت اشتباهه!\n\n"
+            "**فرمت:**\n"
+            "`/add_stock [کد محصول] [تعداد]`\n\n"
+            "**مثال:**\n"
+            "`/add_stock 1 10`\n"
+            "`/add_stock 3 25`",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        product_id = int(parts[1])
+        amount = int(parts[2])
+    except ValueError:
+        await message.answer("❌ کد محصول و تعداد باید عدد باشن!")
+        return
+
+    if amount <= 0:
+        await message.answer("❌ تعداد باید عددی بزرگتر از صفر باشه!")
+        return
+
+    conn = await get_connection()
+    try:
+        # چک کردن وجود محصول
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", product_id)
+        if not product:
+            await message.answer(f"❌ محصولی با آیدی `{product_id}` پیدا نشد.", parse_mode="Markdown")
+            return
+
+        # افزایش موجودی
+        await conn.execute(
+            "UPDATE products SET stock = stock + $1 WHERE product_id = $2",
+            amount, product_id
+        )
+
+        # گرفتن موجودی جدید
+        new_stock = product['stock'] + amount
+        print(f"✅ موجودی محصول '{product['name']}' به {new_stock} افزایش یافت.")
+    finally:
+        await conn.close()
+
+    await message.answer(
+        f"✅ **موجودی محصول افزایش یافت!**\n\n"
+        f"🆔 کد محصول: `{product_id}`\n"
+        f"📦 نام: {product['name']}\n"
+        f"➕ افزایش: {amount} عدد\n"
+        f"📊 موجودی قبلی: {product['stock']} عدد\n"
+        f"📊 **موجودی جدید: {new_stock} عدد**",
+        parse_mode="Markdown"
+    )
+
+# ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
 # ==========================================
 @dp.message(F.text)
