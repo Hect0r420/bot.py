@@ -282,3 +282,62 @@ async def delete_coupon(code: str):
         await conn.execute("DELETE FROM coupons WHERE code = $1", code.upper())
     finally:
         await conn.close()
+
+async def add_to_cart(user_id: int, product_id: int, quantity: int):
+    """اضافه کردن محصول به سبد خرید"""
+    conn = await get_connection()
+    try:
+        existing = await conn.fetchrow(
+            "SELECT * FROM cart_items WHERE user_id = $1 AND product_id = $2",
+            user_id, product_id
+        )
+        if existing:
+            await conn.execute(
+                "UPDATE cart_items SET quantity = quantity + $1 WHERE user_id = $2 AND product_id = $3",
+                quantity, user_id, product_id
+            )
+        else:
+            await conn.execute(
+                "INSERT INTO cart_items (user_id, product_id, quantity) VALUES ($1, $2, $3)",
+                user_id, product_id, quantity
+            )
+    finally:
+        await conn.close()
+
+
+async def get_cart(user_id: int):
+    """گرفتن محتویات سبد خرید"""
+    conn = await get_connection()
+    try:
+        rows = await conn.fetch(
+            """SELECT c.*, p.name, p.price 
+               FROM cart_items c
+               LEFT JOIN products p ON c.product_id = p.product_id
+               WHERE c.user_id = $1
+               ORDER BY c.added_at""",
+            user_id
+        )
+        return rows
+    finally:
+        await conn.close()
+
+
+async def clear_cart(user_id: int):
+    """پاک کردن سبد خرید"""
+    conn = await get_connection()
+    try:
+        await conn.execute("DELETE FROM cart_items WHERE user_id = $1", user_id)
+    finally:
+        await conn.close()
+
+
+async def remove_from_cart(user_id: int, product_id: int):
+    """حذف یک محصول از سبد خرید"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            "DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2",
+            user_id, product_id
+        )
+    finally:
+        await conn.close()
