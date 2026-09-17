@@ -3,3 +3,4 @@ google-genai
 aiohttp
 asyncpg
 apscheduler
+groq
