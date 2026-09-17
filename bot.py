@@ -334,38 +334,40 @@ async def back_to_start(callback: types.CallbackQuery):
 
 # ==========================================
 # ۵. مشاهده محصولات (با عکس و دکمه‌ی سبد)
+# ۲۳. نمایش محصولات یک دسته
 # ==========================================
-@dp.callback_query(F.data == "products")
-async def handle_products(callback: types.CallbackQuery):
+@dp.callback_query(F.data.startswith("cat_"))
+async def handle_category_products(callback: types.CallbackQuery):
+    category = callback.data.replace("cat_", "")
+
     conn = await get_connection()
     try:
-        products = await conn.fetch("SELECT * FROM products WHERE stock > 0 ORDER BY product_id")
+        products = await conn.fetch(
+            """SELECT * FROM products 
+               WHERE stock > 0 AND category = $1
+               ORDER BY product_id""",
+            category
+        )
     finally:
         await conn.close()
 
     if not products:
-        await callback.message.answer(
-            "🛒 **محصولات هکتور آنلاین شاپ**\n\n"
-            "😔 در حال حاضر هیچ محصولی موجود نیست.\n\n"
-            "📞 برای اطلاع از موجودی، با پشتیبانی تماس بگیرید."
-        )
+        await callback.message.answer(f"😔 محصولی توی دسته‌ی «{category}» موجود نیست.")
         await callback.answer()
         return
 
-   # دکمه‌ی دسته‌بندی و سبد خرید
-        cart_keyboard = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="📂 دسته‌بندی محصولات", callback_data="categories")],
-        [InlineKeyboardButton(text="🛒 مشاهده سبد خرید", callback_data="view_cart")],
-    ]
-)
+    await callback.message.answer(
+        f"📂 **دسته‌بندی: {category}**\n\n"
+        f"تعداد محصولات: {len(products)}\n"
+        f"👇",
+        parse_mode="Markdown"
+    )
 
     for p in products:
         caption = (
             f"🔹 **{p['name']}**\n"
             f"💰 قیمت: {p['price']:,} تومان\n"
-            f"📦 موجودی: {p['stock']} عدد\n"
-            f"🏷️ دسته‌بندی: {p['category'] or 'متفرقه'}"
+            f"📦 موجودی: {p['stock']} عدد"
         )
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
@@ -382,19 +384,9 @@ async def handle_products(callback: types.CallbackQuery):
                 )
             except Exception as e:
                 print(f"❌ خطا در ارسال عکس {p['name']}: {e}")
-                await callback.message.answer(
-                    caption + "\n\n⚠️ (عکس این محصول در دسترس نیست)",
-                    reply_markup=keyboard,
-                    parse_mode="Markdown"
-                )
+                await callback.message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
         else:
             await callback.message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
-
-    # نمایش دکمه‌ی سبد خرید
-    await callback.message.answer(
-        "👇 برای دیدن سبد خریدت، روی دکمه‌ی زیر بزن:",
-        reply_markup=cart_keyboard
-    )
 
     await callback.answer()
 
