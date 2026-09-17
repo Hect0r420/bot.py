@@ -49,8 +49,13 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 # ==========================================
 # ۲. بخش ارتباط با هوش مصنوعی (با آگاهی از محصولات)
 # ==========================================
+# ==========================================
+# ۲۲. تابع دریافت پاسخ از AI (با مدیریت خطا)
+# ==========================================
 async def get_ai_response_async(user_message: str) -> str:
+    """گرفتن پاسخ از AI با در نظر گرفتن محصولات موجود در دیتابیس"""
     try:
+        # گرفتن لیست محصولات از دیتابیس
         conn = await get_connection()
         try:
             products = await conn.fetch(
@@ -59,6 +64,7 @@ async def get_ai_response_async(user_message: str) -> str:
         finally:
             await conn.close()
 
+        # ساخت متن محصولات برای دادن به AI
         if products:
             products_text = "\n\n📦 **لیست محصولات موجود در فروشگاه (از دیتابیس):**\n"
             for p in products:
@@ -72,6 +78,7 @@ async def get_ai_response_async(user_message: str) -> str:
 
         full_message = f"{user_message}\n{products_text}"
 
+        # فرستادن به AI
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None, lambda: ai_client.models.generate_content(
@@ -83,11 +90,38 @@ async def get_ai_response_async(user_message: str) -> str:
             )
         )
         return response.text
+
     except Exception as e:
         error_str = str(e)
-        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
-            return "🙏 متاسفانه در حال حاضر ظرفیت پاسخگویی هوش مصنوعی تکمیل شده است. لطفاً چند دقیقه دیگه دوباره تلاش کنید یا با پشتیبانی تماس بگیرید."
-        return f"خطا در پردازش هوش مصنوعی: {e}"
+
+        # مدیریت خطای تموم شدن ظرفیت (429)
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
+            print("⚠️ ظرفیت هوش مصنوعی تموم شده.")
+            return (
+                "🙏 **متاسفانه در حال حاضر ظرفیت پاسخگویی هوش مصنوعی تکمیل شده است.**\n\n"
+                "⏳ لطفاً چند دقیقه دیگه دوباره تلاش کنید.\n\n"
+                "📞 یا اگه سوال فوری دارید، با پشتیبانی تماس بگیرید:\n"
+                f"`{SUPPORT_PHONE}`"
+            )
+
+        # مدیریت خطای کلید API
+        elif "API_KEY" in error_str or "api_key" in error_str or "invalid" in error_str.lower():
+            print(f"❌ خطای کلید API: {error_str}")
+            return (
+                "⚠️ **مشکلی در سیستم هوش مصنوعی پیش اومده.**\n\n"
+                "لطفاً به ادمین اطلاع بدید تا بررسی کنه.\n\n"
+                f"📞 شماره پشتیبانی: `{SUPPORT_PHONE}`"
+            )
+
+        # خطاهای دیگه
+        else:
+            print(f"❌ خطای AI: {error_str}")
+            return (
+                "😔 **متاسفانه در حال حاضر نمی‌تونم جواب بدم.**\n\n"
+                "لطفاً چند لحظه دیگه دوباره تلاش کن.\n\n"
+                f"📞 اگه سوال فوری داری، با پشتیبانی تماس بگیر:\n"
+                f"`{SUPPORT_PHONE}`"
+            )
 
 
 # ==========================================
