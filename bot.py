@@ -820,6 +820,69 @@ async def handle_birthday(message: types.Message):
         f"از این به بعد، توی روز تولدت تخفیف‌های ویژه‌ای برات در نظر می‌گیریم! 🎁"
     )
 
+# ==========================================
+# ۲۹. هشدار اتمام موجودی (زمان‌بند)
+# ==========================================
+async def check_low_stock():
+    """چک کردن محصولات با موجودی کم و ارسال هشدار به ادمین"""
+    LOW_STOCK_THRESHOLD = 3  # 🟢 حد موجودی کم (قابل تغییر)
+
+    try:
+        conn = await get_connection()
+        try:
+            low_stock_products = await conn.fetch(
+                """SELECT * FROM products 
+                   WHERE stock <= $1 AND stock >= 0
+                   ORDER BY stock ASC""",
+                LOW_STOCK_THRESHOLD
+            )
+        finally:
+            await conn.close()
+
+        if not low_stock_products:
+            print("ℹ️ همه‌ی محصولات موجودی کافی دارن.")
+            return
+
+        print(f"⚠️ {len(low_stock_products)} محصول موجودی کم دارن.")
+
+        # ساخت متن هشدار
+        alert_text = (
+            f"⚠️ **هشدار اتمام موجودی!**\n\n"
+            f"👑 مدیر عزیز، این محصولات موجودی‌شون کم شده:\n\n"
+        )
+
+        for p in low_stock_products:
+            if p['stock'] == 0:
+                status = "🔴 **تمام شده!**"
+            elif p['stock'] <= 2:
+                status = "🟠 **بحرانی**"
+            else:
+                status = "🟡 کم"
+
+            alert_text += (
+                f"📦 **{p['name']}**\n"
+                f"🆔 کد: `{p['product_id']}`\n"
+                f"🔢 موجودی: `{p['stock']}` عدد {status}\n"
+                f"🏷️ دسته: {p['category'] or 'متفرقه'}\n"
+                f"─────────────\n"
+            )
+
+        alert_text += (
+            f"\n💡 **پیشنهاد:** با دستور `/add_stock [کد محصول] [تعداد]` موجودی رو افزایش بده.\n\n"
+            f"مثال: `/add_stock {low_stock_products[0]['product_id']} 20`"
+        )
+
+        # ارسال به ادمین
+        await bot.send_message(
+            chat_id=ADMIN_ID,
+            text=alert_text,
+            parse_mode="Markdown"
+        )
+        print(f"✅ هشدار اتمام موجودی برای {len(low_stock_products)} محصول ارسال شد.")
+
+    except Exception as e:
+        print(f"❌ خطا در چک کردن موجودی: {e}")
+
 
 # ==========================================
 # ۷. دستورات ادمین
@@ -1134,6 +1197,8 @@ async def cmd_admin(message: types.Message):
     "📋 **سفارشات مشتری:**\n"
     "📊 **گزارش فروش پیشرفته:**\n"
 "• `/report` → گزارش کامل فروش (امروز، ۷ روز، ۳۰ روز، کل)\n\n"
+    "⚠️ **هشدار اتمام موجودی:**\n"
+"• (به صورت خودکار هر ۶ ساعت اجرا میشه)\n\n"
     "• `/my_orders` → مشتری‌ها می‌تونن سفارشات فعالشون رو ببینن و لغو کنن\n\n"
     "📊 **آمار:**\n"
     "• `/stats` → مشاهده‌ی آمار کلی ربات\n\n"
@@ -2666,6 +2731,9 @@ async def main():
 
 # راه‌اندازی زمان‌بند تخفیف تولد (هر روز ساعت ۹ صبح)
     scheduler.add_job(check_birthdays, 'cron', hour=9, minute=0)
+
+# راه‌اندازی زمان‌بند هشدار اتمام موجودی (هر ۶ ساعت)
+scheduler.add_job(check_low_stock, 'interval', hours=6)
 
     scheduler.start()
     print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
