@@ -444,3 +444,12 @@ async def update_order_status(order_code: str, new_status: str):
         print(f"✅ وضعیت سفارش {order_code} به '{new_status}' تغییر یافت.")
     finally:
         await conn.close()
+
+async def get_all_users():
+    """گرفتن لیست همه‌ی کاربران"""
+    conn = await get_connection()
+    try:
+        rows = await conn.fetch("SELECT user_id, first_name FROM users ORDER BY user_id")
+        return rows
+    finally:
+        await conn.close()
