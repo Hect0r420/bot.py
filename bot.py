@@ -1634,8 +1634,14 @@ async def handle_search(message: types.Message):
 # ==========================================
 @dp.message(F.text)
 async def handle_all_messages(message: types.Message):
-    response_text = await get_ai_response_async(message.text)
-    await message.answer(response_text)
+    print(f"🔍 DEBUG 1: پیام دریافت شد: {message.text}")
+    try:
+        response_text = await get_ai_response_async(message.text)
+        print(f"🔍 DEBUG 2: پاسخ دریافت شد: {response_text[:50]}")
+        await message.answer(response_text)
+    except Exception as e:
+        print(f"❌ DEBUG 3: خطا: {e}")
+        await message.answer(f"❌ خطا: {e}")
 
 
 # ==========================================
