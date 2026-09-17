@@ -2733,7 +2733,7 @@ async def main():
     scheduler.add_job(check_birthdays, 'cron', hour=9, minute=0)
 
 # راه‌اندازی زمان‌بند هشدار اتمام موجودی (هر ۶ ساعت)
-scheduler.add_job(check_low_stock, 'interval', hours=6)
+    scheduler.add_job(check_low_stock, 'interval', hours=6)
 
     scheduler.start()
     print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
