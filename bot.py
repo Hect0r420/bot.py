@@ -1516,7 +1516,7 @@ async def main():
     scheduler.add_job(send_daily_report, 'cron', hour=0, minute=0)
 
 # راه‌اندازی زمان‌بند تخفیف تولد (هر روز ساعت ۹ صبح)
-scheduler.add_job(check_birthdays, 'cron', hour=9, minute=0)
+    scheduler.add_job(check_birthdays, 'cron', hour=9, minute=0)
 
     scheduler.start()
     print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
