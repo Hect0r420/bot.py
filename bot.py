@@ -689,12 +689,10 @@ async def handle_coupon_input(message: types.Message):
     coupon_code = None
     discount_percent = 0
 
-    # اگه کاربر نوشت "ندارم"
     if text == "ندارم":
         discount_percent = 0
     else:
-        # چک کردن کد تخفیف
-        coupon = await get_coupon(text.upper())
+        coupon = await get_coupon(text.upper(), user_id)
         if not coupon:
             await message.answer(
                 "❌ کد تخفیف نامعتبره!\n\n"
@@ -703,7 +701,6 @@ async def handle_coupon_input(message: types.Message):
             )
             return
 
-        # چک کردن محدودیت استفاده
         if coupon['max_uses'] > 0 and coupon['used_count'] >= coupon['max_uses']:
             await message.answer(
                 "❌ این کد تخفیف به حد مجاز استفاده رسیده!\n\n"
@@ -751,7 +748,6 @@ async def handle_coupon_input(message: types.Message):
             quantity, product['product_id']
         )
 
-        # اگه کد تخفیف استفاده شد، تعداد استفادش رو زیاد کن
         if coupon_code:
             await conn.execute(
                 "UPDATE coupons SET used_count = used_count + 1 WHERE code = $1",
@@ -786,19 +782,20 @@ async def handle_coupon_input(message: types.Message):
         f"⏳ وضعیت: **در انتظار پرداخت**",
         parse_mode="Markdown"
     )
-     # 🟢 اطلاع‌رسانی به ادمین
-        try:
-            await bot.send_message(
-             chat_id=ADMIN_ID,
-             text=(
-                 f"🔔 **سفارش جدید ثبت شد!**\n\n"
-                 f"🆔 کد سفارش: `{order_code}`\n"
-                 f"👤 مشتری: {message.from_user.first_name or 'نامشخص'}\n"
-                 f"🆔 آیدی: `{user_id}`\n"
-                 f"📦 محصول: {product['name']}\n"
-                 f"🔢 تعداد: {quantity}\n"
-                 f"💰 مبلغ: {final_price:,} تومان\n"
-                 f"📊 وضعیت: **در انتظار پرداخت**"
+
+    # 🟢 اطلاع‌رسانی به ادمین
+    try:
+        await bot.send_message(
+            chat_id=ADMIN_ID,
+            text=(
+                f"🔔 **سفارش جدید ثبت شد!**\n\n"
+                f"🆔 کد سفارش: `{order_code}`\n"
+                f"👤 مشتری: {message.from_user.first_name or 'نامشخص'}\n"
+                f"🆔 آیدی: `{user_id}`\n"
+                f"📦 محصول: {product['name']}\n"
+                f"🔢 تعداد: {quantity}\n"
+                f"💰 مبلغ: {final_price:,} تومان\n"
+                f"📊 وضعیت: **در انتظار پرداخت**"
             ),
             parse_mode="Markdown"
         )
