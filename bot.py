@@ -1652,24 +1652,13 @@ async def cmd_admin_panel(message: types.Message):
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products"),
-            ],
-            [
-                InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders"),
-            ],
-            [
-                InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users"),
-            ],
-            [
-                InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons"),
-            ],
-            [
-                InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats"),
-            ],
-            [
-                InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close"),
-            ],
+            [InlineKeyboardButton(text="📦 مدیریت محصولات", callback_data="admin_products")],
+            [InlineKeyboardButton(text="🛒 مدیریت سفارشات", callback_data="admin_orders")],
+            [InlineKeyboardButton(text="👥 مدیریت کاربران", callback_data="admin_users")],
+            [InlineKeyboardButton(text="🎟️ مدیریت کدهای تخفیف", callback_data="admin_coupons")],
+            [InlineKeyboardButton(text="📢 ارسال پیام همگانی", callback_data="admin_broadcast_help")],
+            [InlineKeyboardButton(text="📊 آمار ربات", callback_data="admin_stats")],
+            [InlineKeyboardButton(text="🔄 بستن پنل", callback_data="admin_close")],
         ]
     )
 
@@ -2138,59 +2127,6 @@ async def cmd_cancel_broadcast(message: types.Message):
     await message.answer("❌ ارسال پیام همگانی لغو شد.")
 
 
-@dp.message(F.text)
-async def handle_broadcast_message(message: types.Message):
-    # فقط اگه ادمین توی حالت انتظار باشه
-    if message.from_user.id != ADMIN_ID or message.from_user.id not in broadcast_waiting:
-        return
-
-    # پاک کردن حالت انتظار
-    del broadcast_waiting[message.from_user.id]
-
-    broadcast_text = message.text
-
-    # گرفتن لیست کاربران
-    users = await get_all_users()
-
-    if not users:
-        await message.answer("❌ هیچ کاربری ثبت نشده.")
-        return
-
-    # پیام تایید
-    await message.answer(
-        f"📢 **شروع ارسال پیام همگانی...**\n\n"
-        f"👥 تعداد کاربران: **{len(users)}**\n"
-        f"📝 متن پیام:\n\n{broadcast_text}\n\n"
-        f"⏳ در حال ارسال...",
-        parse_mode="Markdown"
-    )
-
-    # ارسال پیام به همه
-    success = 0
-    failed = 0
-
-    for user in users:
-        try:
-            await bot.send_message(
-                chat_id=user['user_id'],
-                text=broadcast_text,
-                parse_mode="Markdown"
-            )
-            success += 1
-            # تاخیر کوچیک برای جلوگیری از Rate Limit
-            await asyncio.sleep(0.05)
-        except Exception as e:
-            print(f"❌ خطا در ارسال به {user['user_id']}: {e}")
-            failed += 1
-
-    # گزارش نهایی
-    await message.answer(
-        f"✅ **ارسال پیام همگانی تموم شد!**\n\n"
-        f"📤 موفق: **{success}** کاربر\n"
-        f"❌ ناموفق: **{failed}** کاربر\n"
-        f"👥 مجموع: **{len(users)}** کاربر",
-        parse_mode="Markdown"
-    )
 
 # ==========================================
 # ۲۰. تخفیف ویژه تولد
@@ -2513,19 +2449,58 @@ async def handle_my_orders_btn(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==========================================
-# ۹. AI (آخرین هندلر - Fallback)
+# ۹. AI + Broadcast Handler
 # ==========================================
+broadcast_waiting = {}  # دیکشنری برای ذخیره‌ی حالت انتظار Broadcast
+
+
 @dp.message(F.text)
 async def handle_all_messages(message: types.Message):
-    print(f"🔍 DEBUG 1: پیام دریافت شد: {message.text}")
-    try:
-        response_text = await get_ai_response_async(message.text)
-        print(f"🔍 DEBUG 2: پاسخ دریافت شد: {response_text[:50]}")
-        await message.answer(response_text)
-    except Exception as e:
-        print(f"❌ DEBUG 3: خطا: {e}")
-        await message.answer(f"❌ خطا: {e}")
-
+    # چک کن اگه ادمین توی حالت Broadcast هست
+    if message.from_user.id == ADMIN_ID and message.from_user.id in broadcast_waiting:
+        del broadcast_waiting[message.from_user.id]
+        
+        broadcast_text = message.text
+        users = await get_all_users()
+        
+        if not users:
+            await message.answer("❌ هیچ کاربری ثبت نشده.")
+            return
+        
+        await message.answer(
+            f"📢 **شروع ارسال پیام همگانی...**\n\n"
+            f"👥 تعداد کاربران: **{len(users)}**\n"
+            f"⏳ در حال ارسال...",
+            parse_mode="Markdown"
+        )
+        
+        success = 0
+        failed = 0
+        
+        for user in users:
+            try:
+                await bot.send_message(
+                    chat_id=user['user_id'],
+                    text=broadcast_text,
+                    parse_mode="Markdown"
+                )
+                success += 1
+                await asyncio.sleep(0.05)
+            except Exception as e:
+                print(f"❌ خطا در ارسال به {user['user_id']}: {e}")
+                failed += 1
+        
+        await message.answer(
+            f"✅ **ارسال پیام همگانی تموم شد!**\n\n"
+            f"📤 موفق: **{success}** کاربر\n"
+            f"❌ ناموفق: **{failed}** کاربر",
+            parse_mode="Markdown"
+        )
+        return
+    
+    # اگه ادمین نبود یا توی حالت Broadcast نبود، برو سمت AI
+    response_text = await get_ai_response_async(message.text)
+    await message.answer(response_text)
 
 # ==========================================
 # ۱۰. اجرای اصلی (Webhook)
