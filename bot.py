@@ -787,23 +787,23 @@ async def handle_coupon_input(message: types.Message):
         parse_mode="Markdown"
     )
      # 🟢 اطلاع‌رسانی به ادمین
-    try:
-        await bot.send_message(
-        chat_id=ADMIN_ID,
-        text=(
-            f"🔔 **سفارش جدید ثبت شد!**\n\n"
-            f"🆔 کد سفارش: `{order_code}`\n"
-            f"👤 مشتری: {message.from_user.first_name or 'نامشخص'}\n"
-            f"🆔 آیدی: `{user_id}`\n"
-            f"📦 محصول: {product['name']}\n"
-            f"🔢 تعداد: {quantity}\n"
-            f"💰 مبلغ: {final_price:,} تومان\n"
-            f"📊 وضعیت: **در انتظار پرداخت**"
-        ),
-        parse_mode="Markdown"
-    )
-except Exception as e:
-    print(f"❌ خطا در اطلاع‌رسانی به ادمین: {e}")
+        try:
+            await bot.send_message(
+             chat_id=ADMIN_ID,
+             text=(
+                 f"🔔 **سفارش جدید ثبت شد!**\n\n"
+                 f"🆔 کد سفارش: `{order_code}`\n"
+                 f"👤 مشتری: {message.from_user.first_name or 'نامشخص'}\n"
+                 f"🆔 آیدی: `{user_id}`\n"
+                 f"📦 محصول: {product['name']}\n"
+                 f"🔢 تعداد: {quantity}\n"
+                 f"💰 مبلغ: {final_price:,} تومان\n"
+                 f"📊 وضعیت: **در انتظار پرداخت**"
+            ),
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        print(f"❌ خطا در اطلاع‌رسانی به ادمین: {e}")
 
     # پرسیدن شماره تماس (اگه قبلاً نداده)
     user_info = await get_user_info(user_id)
