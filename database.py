@@ -376,3 +376,15 @@ async def create_birthday_coupon(user_id: int, code: str, discount_percent: int)
         print(f"❌ خطا در ساخت کد تخفیف تولد: {e}")
     finally:
         await conn.close()
+
+async def update_order_status(order_code: str, new_status: str):
+    """تغییر وضعیت سفارش توسط ادمین"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            "UPDATE orders SET status = $1 WHERE order_code = $2",
+            new_status, order_code
+        )
+        print(f"✅ وضعیت سفارش {order_code} به '{new_status}' تغییر یافت.")
+    finally:
+        await conn.close()
