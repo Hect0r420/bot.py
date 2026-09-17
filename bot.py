@@ -49,13 +49,14 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 # ==========================================
 # ۲. بخش ارتباط با هوش مصنوعی (با آگاهی از محصولات)
 # ==========================================
-# ==========================================
 # ۲۲. تابع دریافت پاسخ از AI (با مدیریت خطا)
+# ۲۲. تابع دریافت پاسخ از AI (با دیباگ)
 # ==========================================
 async def get_ai_response_async(user_message: str) -> str:
-    """گرفتن پاسخ از AI با در نظر گرفتن محصولات موجود در دیتابیس"""
+    """گرفتن پاسخ از AI با در نظر گرفتن محصولات موجود"""
     try:
-        # گرفتن لیست محصولات از دیتابیس
+        print(f"🔍 DEBUG: درخواست AI برای پیام: {user_message}")
+
         conn = await get_connection()
         try:
             products = await conn.fetch(
@@ -64,21 +65,19 @@ async def get_ai_response_async(user_message: str) -> str:
         finally:
             await conn.close()
 
-        # ساخت متن محصولات برای دادن به AI
+        print(f"🔍 DEBUG: تعداد محصولات: {len(products)}")
+
         if products:
-            products_text = "\n\n📦 **لیست محصولات موجود در فروشگاه (از دیتابیس):**\n"
+            products_text = "\n\n📦 **لیست محصولات موجود:**\n"
             for p in products:
-                products_text += (
-                    f"- {p['name']} | قیمت: {p['price']:,} تومان | "
-                    f"موجودی: {p['stock']} عدد | دسته: {p['category'] or 'متفرقه'}\n"
-                )
-            products_text += "\n⚠️ این اطلاعات از دیتابیس واقعی فروشگاهه. حتماً موقع جواب دادن به مشتری، از همین اطلاعات استفاده کن.\n"
+                products_text += f"- {p['name']} | {p['price']:,} تومان | موجودی: {p['stock']}\n"
         else:
-            products_text = "\n\n⚠️ در حال حاضر هیچ محصولی توی دیتابیس موجود نیست.\n"
+            products_text = "\n\n⚠️ هیچ محصولی موجود نیست.\n"
 
         full_message = f"{user_message}\n{products_text}"
 
-        # فرستادن به AI
+        print(f"🔍 DEBUG: ارسال به Gemini...")
+
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None, lambda: ai_client.models.generate_content(
@@ -89,38 +88,26 @@ async def get_ai_response_async(user_message: str) -> str:
                 ),
             )
         )
+
+        print(f"✅ DEBUG: پاسخ از AI دریافت شد.")
         return response.text
 
     except Exception as e:
         error_str = str(e)
+        print(f"❌ DEBUG: خطای AI: {error_str}")
 
-        # مدیریت خطای تموم شدن ظرفیت (429)
-        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str or "quota" in error_str.lower():
-            print("⚠️ ظرفیت هوش مصنوعی تموم شده.")
+        if "429" in error_str or "RESOURCE_EXHAUSTED" in error_str:
             return (
-                "🙏 **متاسفانه در حال حاضر ظرفیت پاسخگویی هوش مصنوعی تکمیل شده است.**\n\n"
+                "🙏 **ظرفیت هوش مصنوعی تکمیل شده.**\n\n"
                 "⏳ لطفاً چند دقیقه دیگه دوباره تلاش کنید.\n\n"
-                "📞 یا اگه سوال فوری دارید، با پشتیبانی تماس بگیرید:\n"
-                f"`{SUPPORT_PHONE}`"
+                f"📞 یا با پشتیبانی تماس بگیرید: `{SUPPORT_PHONE}`"
             )
-
-        # مدیریت خطای کلید API
-        elif "API_KEY" in error_str or "api_key" in error_str or "invalid" in error_str.lower():
-            print(f"❌ خطای کلید API: {error_str}")
-            return (
-                "⚠️ **مشکلی در سیستم هوش مصنوعی پیش اومده.**\n\n"
-                "لطفاً به ادمین اطلاع بدید تا بررسی کنه.\n\n"
-                f"📞 شماره پشتیبانی: `{SUPPORT_PHONE}`"
-            )
-
-        # خطاهای دیگه
+        elif "API_KEY" in error_str or "invalid" in error_str.lower():
+            return "⚠️ مشکل در کلید API. لطفاً به ادمین اطلاع بدید."
         else:
-            print(f"❌ خطای AI: {error_str}")
             return (
                 "😔 **متاسفانه در حال حاضر نمی‌تونم جواب بدم.**\n\n"
-                "لطفاً چند لحظه دیگه دوباره تلاش کن.\n\n"
-                f"📞 اگه سوال فوری داری، با پشتیبانی تماس بگیر:\n"
-                f"`{SUPPORT_PHONE}`"
+                f"📞 با پشتیبانی تماس بگیر: `{SUPPORT_PHONE}`"
             )
 
 
