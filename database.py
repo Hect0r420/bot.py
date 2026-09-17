@@ -90,6 +90,10 @@ async def init_db():
     )
 """)
 
+# اضافه کردن ستون user_id به جدول coupons (برای کدهای اختصاصی)
+await conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS user_id BIGINT")
+await conn.execute("ALTER TABLE coupons ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP")
+
         print("✅ جدول‌ها و ستون‌ها با موفقیت ساخته/به‌روزرسانی شدن.")
     finally:
         await conn.close()
@@ -240,14 +244,27 @@ async def add_coupon(code: str, discount_percent: int, max_uses: int = 0):
         await conn.close()
 
 
-async def get_coupon(code: str):
-    """گرفتن اطلاعات کد تخفیف"""
+async def get_coupon(code: str, user_id: int = None):
+    """گرفتن اطلاعات کد تخفیف (با چک کردن کاربر و انقضا)"""
     conn = await get_connection()
     try:
         row = await conn.fetchrow(
             "SELECT * FROM coupons WHERE code = $1 AND is_active = TRUE",
             code.upper()
         )
+        if not row:
+            return None
+
+        # چک کردن انقضا
+        if row['expires_at']:
+            from datetime import datetime
+            if datetime.now() > row['expires_at']:
+                return None
+
+        # چک کردن اینکه کد مخصوص کاربر دیگه‌ای نباشه
+        if row['user_id'] and user_id and row['user_id'] != user_id:
+            return None
+
         return row
     finally:
         await conn.close()
@@ -339,5 +356,23 @@ async def remove_from_cart(user_id: int, product_id: int):
             "DELETE FROM cart_items WHERE user_id = $1 AND product_id = $2",
             user_id, product_id
         )
+    finally:
+        await conn.close()
+
+async def create_birthday_coupon(user_id: int, code: str, discount_percent: int):
+    """ساخت کد تخفیف اختصاصی تولد (معتبر برای ۲۴ ساعت)"""
+    from datetime import datetime, timedelta
+    expires_at = datetime.now() + timedelta(hours=24)
+
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """INSERT INTO coupons (code, discount_percent, max_uses, user_id, expires_at)
+               VALUES ($1, $2, 1, $3, $4)""",
+            code.upper(), discount_percent, user_id, expires_at
+        )
+        print(f"✅ کد تخفیف تولد '{code}' برای کاربر {user_id} ساخته شد.")
+    except Exception as e:
+        print(f"❌ خطا در ساخت کد تخفیف تولد: {e}")
     finally:
         await conn.close()
