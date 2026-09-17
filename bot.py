@@ -18,7 +18,8 @@ from database import (
     update_user_info, get_user_info, get_connection,
     add_coupon, get_coupon, use_coupon, get_all_coupons, delete_coupon,
     add_to_cart, get_cart, clear_cart, remove_from_cart,
-    create_birthday_coupon, get_user_orders, cancel_order, update_order_status
+    create_birthday_coupon, get_user_orders, cancel_order, update_order_status,
+    get_all_users
 )
 
 # ==========================================
@@ -1122,6 +1123,8 @@ async def cmd_admin(message: types.Message):
     "• `/add_coupon [کد] [درصد] [حداکثر استفاده]` → افزودن کد تخفیف\n"
     "• `/coupons` → مشاهده‌ی لیست کدهای تخفیف\n"
     "• `/delete_coupon [کد]` → حذف کد تخفیف\n\n"
+    "📢 **ارسال پیام همگانی:**\n"
+    "• `/broadcast` → ارسال پیام به همه‌ی کاربران\n\n"
     "🎂 **تخفیف تولد:**\n"
     "• (به صورت خودکار هر روز ساعت ۹ صبح اجرا میشه)\n\n"
     "📂 **دسته‌بندی محصولات:**\n"
@@ -2008,6 +2011,22 @@ async def admin_add_coupon_help(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+# ---------- راهنمای ارسال پیام همگانی ----------
+@dp.callback_query(F.data == "admin_broadcast_help")
+async def admin_broadcast_help(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ دسترسی ندارید.", show_alert=True)
+        return
+
+    await callback.message.answer(
+        "📢 **ارسال پیام همگانی**\n\n"
+        "برای ارسال پیام به همه‌ی کاربران، دستور زیر رو بزن:\n\n"
+        "`/broadcast`\n\n"
+        "بعدش پیام مورد نظرت رو بفرست تا به همه ارسال بشه.",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
 
 # ---------- آمار ربات ----------
 @dp.callback_query(F.data == "admin_stats")
@@ -2079,6 +2098,98 @@ async def admin_close(callback: types.CallbackQuery):
         "برای باز کردن مجدد، دستور `/admin_panel` رو بزن."
     )
     await callback.answer()
+
+# ==========================================
+# ۲۷. ارسال پیام همگانی (Broadcast)
+# ==========================================
+# دیکشنری برای ذخیره‌ی حالت انتظار
+broadcast_waiting = {}
+
+
+@dp.message(Command("broadcast"))
+async def cmd_broadcast(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
+    broadcast_waiting[message.from_user.id] = True
+
+    await message.answer(
+        "📢 **ارسال پیام همگانی**\n\n"
+        "لطفاً پیامی که می‌خوای برای همه‌ی کاربران ارسال بشه رو بنویس و بفرست.\n\n"
+        "⚠️ **نکات مهم:**\n"
+        "• پیام می‌تونه شامل متن، ایموجی و لینک باشه.\n"
+        "• قبل از ارسال، تعداد کاربران بهت نشون داده میشه.\n"
+        "• می‌تونی با زدن `/cancel_broadcast` لغو کنی.\n\n"
+        "👇 پیام رو بفرست:",
+        parse_mode="Markdown"
+    )
+
+
+@dp.message(Command("cancel_broadcast"))
+async def cmd_cancel_broadcast(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+
+    if message.from_user.id in broadcast_waiting:
+        del broadcast_waiting[message.from_user.id]
+
+    await message.answer("❌ ارسال پیام همگانی لغو شد.")
+
+
+@dp.message(F.text)
+async def handle_broadcast_message(message: types.Message):
+    # فقط اگه ادمین توی حالت انتظار باشه
+    if message.from_user.id != ADMIN_ID or message.from_user.id not in broadcast_waiting:
+        return
+
+    # پاک کردن حالت انتظار
+    del broadcast_waiting[message.from_user.id]
+
+    broadcast_text = message.text
+
+    # گرفتن لیست کاربران
+    users = await get_all_users()
+
+    if not users:
+        await message.answer("❌ هیچ کاربری ثبت نشده.")
+        return
+
+    # پیام تایید
+    await message.answer(
+        f"📢 **شروع ارسال پیام همگانی...**\n\n"
+        f"👥 تعداد کاربران: **{len(users)}**\n"
+        f"📝 متن پیام:\n\n{broadcast_text}\n\n"
+        f"⏳ در حال ارسال...",
+        parse_mode="Markdown"
+    )
+
+    # ارسال پیام به همه
+    success = 0
+    failed = 0
+
+    for user in users:
+        try:
+            await bot.send_message(
+                chat_id=user['user_id'],
+                text=broadcast_text,
+                parse_mode="Markdown"
+            )
+            success += 1
+            # تاخیر کوچیک برای جلوگیری از Rate Limit
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            print(f"❌ خطا در ارسال به {user['user_id']}: {e}")
+            failed += 1
+
+    # گزارش نهایی
+    await message.answer(
+        f"✅ **ارسال پیام همگانی تموم شد!**\n\n"
+        f"📤 موفق: **{success}** کاربر\n"
+        f"❌ ناموفق: **{failed}** کاربر\n"
+        f"👥 مجموع: **{len(users)}** کاربر",
+        parse_mode="Markdown"
+    )
 
 # ==========================================
 # ۲۰. تخفیف ویژه تولد
