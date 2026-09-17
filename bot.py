@@ -1642,7 +1642,9 @@ async def handle_categories(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-
+# ==========================================
+# ۲۳. نمایش محصولات یک دسته خاص (با عکس)
+# ==========================================
 @dp.callback_query(F.data.startswith("cat_"))
 async def handle_category_products(callback: types.CallbackQuery):
     category = callback.data.replace("cat_", "")
