@@ -17,7 +17,8 @@ from database import (
     save_pending_order, get_pending_order, delete_pending_order,
     update_user_info, get_user_info, get_connection,
     add_coupon, get_coupon, use_coupon, get_all_coupons, delete_coupon,
-    add_to_cart, get_cart, clear_cart, remove_from_cart
+    add_to_cart, get_cart, clear_cart, remove_from_cart,
+    create_birthday_coupon
 )
 
 # ==========================================
@@ -1021,6 +1022,8 @@ async def cmd_admin(message: types.Message):
     "• `/delete_coupon [کد]` → حذف کد تخفیف\n\n"
     "📊 **آمار:**\n"
     "• `/stats` → مشاهده‌ی آمار کلی ربات\n\n"
+    "🎂 **تخفیف تولد:**\n"
+    "• (به صورت خودکار هر روز ساعت ۹ صبح اجرا میشه)\n\n"
     "💡 **نکته:** برای دیدن جزئیات هر دستور، فقط خود دستور رو بدون آرگومان بفرست (مثلاً `/stock`) تا راهنماش بیاد."
 )
     await message.answer(admin_help, parse_mode="Markdown")
@@ -1429,6 +1432,65 @@ async def cmd_add_stock(message: types.Message):
     )
 
 # ==========================================
+# ۲۰. تخفیف ویژه تولد
+# ==========================================
+async def check_birthdays():
+    """چک کردن تولد مشتری‌ها و ارسال کد تخفیف"""
+    try:
+        from datetime import datetime
+        today = datetime.now().strftime("%m-%d")  # فقط ماه و روز
+
+        conn = await get_connection()
+        try:
+            # پیدا کردن کاربرانی که امروز تولدشون هست
+            users = await conn.fetch(
+                """SELECT * FROM users 
+                   WHERE birthday IS NOT NULL 
+                   AND TO_CHAR(birthday::date, 'MM-DD') = $1""",
+                today
+            )
+        finally:
+            await conn.close()
+
+        if not users:
+            print("ℹ️ امروز تولد هیچ مشتری‌ای نیست.")
+            return
+
+        print(f"🎂 امروز تولد {len(users)} مشتری است.")
+
+        for user in users:
+            try:
+                # ساخت کد تخفیف اختصاصی
+                birthday_code = f"BDAY{user['user_id'] % 10000}"
+                await create_birthday_coupon(user['user_id'], birthday_code, 15)
+
+                # ارسال پیام تبریک
+                name = user['first_name'] or "رفیق"
+                message_text = (
+                    f"🎉🎂 **تولدت مبارک {name} جان!** 🎂🎉\n\n"
+                    f"امروز روز خاصیه و ما نمی‌تونیم این روز رو بدون هدیه بگذرونیم! 🎁\n\n"
+                    f"به مناسبت تولدت، یه **کد تخفیف ۱۵٪ اختصاصی** برات آماده کردیم:\n\n"
+                    f"🎟️ کد تخفیف: `{birthday_code}`\n"
+                    f"⏳ اعتبار: فقط **۲۴ ساعت** (فقط برای امروز!)\n"
+                    f"💰 قابل استفاده روی همه‌ی محصولات\n\n"
+                    f"پس عجله کن و از تخفیف تولدت استفاده کن! 🛍️\n\n"
+                    f"از طرف تیم **هکتور آنلاین شاپ** ❤️"
+                )
+
+                await bot.send_message(
+                    chat_id=user['user_id'],
+                    text=message_text,
+                    parse_mode="Markdown"
+                )
+                print(f"✅ پیام تولد برای {name} ({user['user_id']}) ارسال شد.")
+
+            except Exception as e:
+                print(f"❌ خطا در ارسال پیام تولد برای {user['user_id']}: {e}")
+
+    except Exception as e:
+        print(f"❌ خطا در چک کردن تولدها: {e}")
+
+# ==========================================
 # ۹. AI (آخرین هندلر - Fallback)
 # ==========================================
 @dp.message(F.text)
@@ -1452,6 +1514,9 @@ async def main():
 
     # راه‌اندازی زمان‌بند گزارش فروش روزانه (هر شب ساعت ۱۲)
     scheduler.add_job(send_daily_report, 'cron', hour=0, minute=0)
+
+# راه‌اندازی زمان‌بند تخفیف تولد (هر روز ساعت ۹ صبح)
+scheduler.add_job(check_birthdays, 'cron', hour=9, minute=0)
 
     scheduler.start()
     print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
