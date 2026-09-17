@@ -16,7 +16,8 @@ from database import (
     init_db, add_user, get_all_products, create_order, get_order_status,
     save_pending_order, get_pending_order, delete_pending_order,
     update_user_info, get_user_info, get_connection,
-    add_coupon, get_coupon, use_coupon, get_all_coupons, delete_coupon
+    add_coupon, get_coupon, use_coupon, get_all_coupons, delete_coupon,
+    add_to_cart, get_cart, clear_cart, remove_from_cart
 )
 
 # ==========================================
@@ -269,7 +270,7 @@ async def back_to_start(callback: types.CallbackQuery):
 
 
 # ==========================================
-# ۵. مشاهده محصولات (با عکس)
+# ۵. مشاهده محصولات (با عکس و دکمه‌ی سبد)
 # ==========================================
 @dp.callback_query(F.data == "products")
 async def handle_products(callback: types.CallbackQuery):
@@ -288,6 +289,13 @@ async def handle_products(callback: types.CallbackQuery):
         await callback.answer()
         return
 
+    # دکمه‌ی مشاهده سبد خرید
+    cart_keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🛒 مشاهده سبد خرید", callback_data="view_cart")]
+        ]
+    )
+
     for p in products:
         caption = (
             f"🔹 **{p['name']}**\n"
@@ -297,7 +305,7 @@ async def handle_products(callback: types.CallbackQuery):
         )
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="🛒 ثبت سفارش", callback_data=f"order_{p['product_id']}")]
+                [InlineKeyboardButton(text="➕ افزودن به سبد", callback_data=f"addcart_{p['product_id']}")]
             ]
         )
         if p['image_url']:
@@ -318,6 +326,170 @@ async def handle_products(callback: types.CallbackQuery):
         else:
             await callback.message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
 
+    # نمایش دکمه‌ی سبد خرید
+    await callback.message.answer(
+        "👇 برای دیدن سبد خریدت، روی دکمه‌ی زیر بزن:",
+        reply_markup=cart_keyboard
+    )
+
+    await callback.answer()
+
+# ==========================================
+# ۱۸. مدیریت سبد خرید
+# ==========================================
+
+# شروع افزودن به سبد
+@dp.callback_query(F.data.startswith("addcart_"))
+async def handle_add_to_cart(callback: types.CallbackQuery):
+    product_id = int(callback.data.split("_")[1])
+
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", product_id)
+    finally:
+        await conn.close()
+
+    if not product:
+        await callback.message.answer("❌ محصول مورد نظر پیدا نشد.")
+        await callback.answer()
+        return
+
+    # ذخیره در pending_orders برای گرفتن تعداد
+    await save_pending_order(callback.from_user.id, product_id)
+
+    await callback.message.answer(
+        f"🛒 **افزودن به سبد: {product['name']}**\n\n"
+        f"💰 قیمت واحد: {product['price']:,} تومان\n"
+        f"📦 موجودی: {product['stock']} عدد\n\n"
+        f"لطفاً **تعداد** مورد نظرت رو بنویس و بفرست (فقط عدد):",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+# هندلر تعداد برای سبد (جدا از سفارش معمولی)
+@dp.message(F.text.regexp(r"^\d+$"))
+async def handle_cart_quantity(message: types.Message):
+    user_id = message.from_user.id
+    pending = await get_pending_order(user_id)
+    if not pending:
+        return
+
+    # چک کن که کاربر توی حالت "افزودن به سبد" هست یا "ثبت سفارش"
+    # اینجا فرض می‌کنیم هر کاربری که pending داره، داره به سبد اضافه می‌کنه
+    conn = await get_connection()
+    try:
+        product = await conn.fetchrow("SELECT * FROM products WHERE product_id = $1", pending['product_id'])
+    finally:
+        await conn.close()
+
+    if not product:
+        await message.answer("❌ محصول مورد نظر پیدا نشد.")
+        await delete_pending_order(user_id)
+        return
+
+    quantity = int(message.text)
+
+    if quantity <= 0:
+        await message.answer("❌ تعداد باید عددی بزرگتر از صفر باشه.")
+        return
+
+    if quantity > product['stock']:
+        await message.answer(f"❌ متاسفانه فقط {product['stock']} عدد موجوده.")
+        return
+
+    # اضافه کردن به سبد
+    await add_to_cart(user_id, pending['product_id'], quantity)
+    await delete_pending_order(user_id)
+
+    await message.answer(
+        f"✅ **{product['name']}** به سبد خریدت اضافه شد!\n\n"
+        f"🔢 تعداد: {quantity}\n\n"
+        f"🛒 برای دیدن سبد و ثبت نهایی، روی دکمه‌ی زیر بزن:",
+        reply_markup=InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🛒 مشاهده سبد خرید", callback_data="view_cart")],
+                [InlineKeyboardButton(text="🛍️ ادامه خرید", callback_data="products")],
+            ]
+        )
+    )
+
+
+# مشاهده سبد خرید
+@dp.callback_query(F.data == "view_cart")
+async def handle_view_cart(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    cart = await get_cart(user_id)
+
+    if not cart:
+        await callback.message.answer(
+            "🛒 سبد خریدت خالیه!\n\n"
+            "برای خرید، روی دکمه‌ی «🛒 مشاهده محصولات» بزن.",
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="🛒 مشاهده محصولات", callback_data="products")]
+                ]
+            )
+        )
+        await callback.answer()
+        return
+
+    text = "🛒 **سبد خرید شما**\n\n"
+    total = 0
+    for item in cart:
+        item_total = item['price'] * item['quantity']
+        total += item_total
+        text += (
+            f"🔹 **{item['name']}**\n"
+            f"🔢 تعداد: {item['quantity']}\n"
+            f"💰 قیمت: {item_total:,} تومان\n"
+            f"─────────────\n"
+        )
+
+    text += f"\n💵 **مبلغ کل: {total:,} تومان**"
+
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ ثبت نهایی سفارش", callback_data="checkout")],
+            [InlineKeyboardButton(text="🛍️ ادامه خرید", callback_data="products")],
+            [InlineKeyboardButton(text="🗑️ خالی کردن سبد", callback_data="clear_cart")],
+        ]
+    )
+
+    await callback.message.answer(text, reply_markup=keyboard, parse_mode="Markdown")
+    await callback.answer()
+
+
+# خالی کردن سبد
+@dp.callback_query(F.data == "clear_cart")
+async def handle_clear_cart(callback: types.CallbackQuery):
+    await clear_cart(callback.from_user.id)
+    await callback.message.answer("🗑️ سبد خریدت خالی شد!")
+    await callback.answer()
+
+
+# ثبت نهایی سفارش (checkout)
+@dp.callback_query(F.data == "checkout")
+async def handle_checkout(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    cart = await get_cart(user_id)
+
+    if not cart:
+        await callback.message.answer("🛒 سبد خریدت خالیه!")
+        await callback.answer()
+        return
+
+    # محاسبه‌ی مبلغ کل
+    total = sum(item['price'] * item['quantity'] for item in cart)
+
+    await callback.message.answer(
+        f"🛒 **سبد خرید شما آماده‌ی ثبت نهاییه!**\n\n"
+        f"💰 مبلغ کل: {total:,} تومان\n\n"
+        f"🎟️ **کد تخفیف داری؟**\n\n"
+        f"اگه داری، کد رو بنویس و بفرست (مثلاً: `WELCOME10`).\n"
+        f"اگه نداری، بنویس: **ندارم**",
+        parse_mode="Markdown"
+    )
     await callback.answer()
 
 
