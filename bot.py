@@ -973,6 +973,10 @@ async def handle_product_input(message: types.Message):
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        return
+
     conn = await get_connection()
     try:
         user_count = await conn.fetchval("SELECT COUNT(*) FROM users")
