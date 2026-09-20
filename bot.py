@@ -2894,7 +2894,7 @@ async def main():
 PORT = int(os.getenv("PORT", 10000))
 
     if not RENDER_URL:
-    raise RuntimeError("RENDER_EXTERNAL_URL تنظیم نشده است")
+        raise RuntimeError("RENDER_EXTERNAL_URL تنظیم نشده است")
 
     RENDER_URL = RENDER_URL.rstrip("/")
 
