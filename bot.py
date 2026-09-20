@@ -2893,12 +2893,12 @@ async def main():
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
 PORT = int(os.getenv("PORT", 10000))
 
-if not RENDER_URL:
+    if not RENDER_URL:
     raise RuntimeError("RENDER_EXTERNAL_URL تنظیم نشده است")
 
-RENDER_URL = RENDER_URL.rstrip("/")
+    RENDER_URL = RENDER_URL.rstrip("/")
 
-WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+    WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 
 
     # ست کردن Webhook در تلگرام
