@@ -2675,47 +2675,40 @@ async def handle_my_orders_btn(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==========================================
-# ۹. AI + Broadcast Handler
+# ۹. AI + Broadcast + Coupon Handler
 # ==========================================
 broadcast_waiting = {}  # دیکشنری برای ذخیره‌ی حالت انتظار Broadcast
 
 
 @dp.message(F.text)
 async def handle_all_messages(message: types.Message):
-    # چک کن اگه ادمین توی حالت Broadcast هست
-    if message.from_user.id == ADMIN_ID and message.from_user.id in broadcast_waiting:
-        del broadcast_waiting[message.from_user.id]
-        
+    user_id = message.from_user.id
+    text = message.text.strip()
+
+    # ۱. چک کن اگه ادمین توی حالت Broadcast هست
+    if user_id == ADMIN_ID and user_id in broadcast_waiting:
+        del broadcast_waiting[user_id]
         broadcast_text = message.text
         users = await get_all_users()
-        
         if not users:
             await message.answer("❌ هیچ کاربری ثبت نشده.")
             return
-        
         await message.answer(
             f"📢 **شروع ارسال پیام همگانی...**\n\n"
             f"👥 تعداد کاربران: **{len(users)}**\n"
             f"⏳ در حال ارسال...",
             parse_mode="Markdown"
         )
-        
         success = 0
         failed = 0
-        
         for user in users:
             try:
-                await bot.send_message(
-                    chat_id=user['user_id'],
-                    text=broadcast_text,
-                    parse_mode="Markdown"
-                )
+                await bot.send_message(chat_id=user['user_id'], text=broadcast_text, parse_mode="Markdown")
                 success += 1
                 await asyncio.sleep(0.05)
             except Exception as e:
                 print(f"❌ خطا در ارسال به {user['user_id']}: {e}")
                 failed += 1
-        
         await message.answer(
             f"✅ **ارسال پیام همگانی تموم شد!**\n\n"
             f"📤 موفق: **{success}** کاربر\n"
@@ -2723,8 +2716,127 @@ async def handle_all_messages(message: types.Message):
             parse_mode="Markdown"
         )
         return
-    
-    # اگه ادمین نبود یا توی حالت Broadcast نبود، برو سمت AI
+
+    # ۲. چک کن اگه کاربر توی حالت انتظار کد تخفیف هست
+    pending = await get_pending_order(user_id)
+    if pending and pending.get('quantity'):
+        # کاربر توی حالت انتظار کد تخفیف هست
+        coupon_code = None
+        discount_percent = 0
+
+        if text == "ندارم" or text.lower() == "ndaram":
+            discount_percent = 0
+        else:
+            coupon = await get_coupon(text.upper(), user_id)
+            if not coupon:
+                await message.answer(
+                    "❌ کد تخفیف نامعتبره!\n\n"
+                    "اگه کد دیگه‌ای داری، دوباره بفرست. یا بنویس **ندارم** تا سفارشت بدون تخفیف ثبت بشه.",
+                    parse_mode="Markdown"
+                )
+                return
+            if coupon['max_uses'] > 0 and coupon['used_count'] >= coupon['max_uses']:
+                await message.answer(
+                    "❌ این کد تخفیف به حد مجاز استفاده رسیده!\n\n"
+                    "بنویس **ندارم** تا سفارشت بدون تخفیف ثبت بشه.",
+                    parse_mode="Markdown"
+                )
+                return
+            coupon_code = coupon['code']
+            discount_percent = coupon['discount_percent']
+
+        # گرفتن اطلاعات محصول
+        conn = await get_connection()
+        try:
+            product = await conn.fetchrow(
+                "SELECT * FROM products WHERE product_id = $1", pending['product_id']
+            )
+        finally:
+            await conn.close()
+
+        if not product:
+            await message.answer("❌ محصول مورد نظر پیدا نشد.")
+            return
+
+        quantity = pending['quantity']
+        total_price = product['price'] * quantity
+        discount_amount = int(total_price * discount_percent / 100)
+        final_price = total_price - discount_amount
+
+        order_code = "ORD-" + "".join(random.choices(string.digits, k=5))
+
+        # ثبت سفارش
+        conn = await get_connection()
+        try:
+            await conn.execute(
+                """INSERT INTO orders (order_code, user_id, product_id, quantity, total_price, status)
+                   VALUES ($1, $2, $3, $4, $5, $6)""",
+                order_code, user_id, product['product_id'], quantity, final_price, "در انتظار پرداخت"
+            )
+            await conn.execute(
+                "UPDATE products SET stock = stock - $1 WHERE product_id = $2",
+                quantity, product['product_id']
+            )
+            if coupon_code:
+                await conn.execute(
+                    "UPDATE coupons SET used_count = used_count + 1 WHERE code = $1",
+                    coupon_code
+                )
+        finally:
+            await conn.close()
+
+        await delete_pending_order(user_id)
+
+        if discount_percent > 0:
+            discount_text = (
+                f"\n🎟️ کد تخفیف: `{coupon_code}`\n"
+                f"💸 تخفیف: {discount_percent}% ({discount_amount:,} تومان)\n"
+                f"💰 **مبلغ قابل پرداخت: {final_price:,} تومان**\n"
+            )
+        else:
+            discount_text = f"\n💰 **مبلغ قابل پرداخت: {final_price:,} تومان**\n"
+
+        await message.answer(
+            f"✅ **سفارش شما ثبت شد!**\n\n"
+            f"🆔 کد سفارش: `{order_code}`\n"
+            f"📦 محصول: {product['name']}\n"
+            f"🔢 تعداد: {quantity}\n"
+            f"💵 مبلغ اصلی: {total_price:,} تومان\n"
+            f"{discount_text}\n"
+            f"💳 **برای تکمیل سفارش، مبلغ {final_price:,} تومان رو به شماره کارت زیر واریز کن:**\n\n"
+            f"`{CARD_NUMBER}`\n\n"
+            f"📸 بعد از پرداخت، **عکس رسید** رو همین‌جا بفرست.\n\n"
+            f"⏳ وضعیت: **در انتظار پرداخت**",
+            parse_mode="Markdown"
+        )
+
+        # اطلاع‌رسانی به ادمین
+        try:
+            await bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"🔔 **سفارش جدید ثبت شد!**\n\n"
+                    f"🆔 کد سفارش: `{order_code}`\n"
+                    f"👤 مشتری: {message.from_user.first_name or 'نامشخص'}\n"
+                    f"📦 محصول: {product['name']}\n"
+                    f"🔢 تعداد: {quantity}\n"
+                    f"💰 مبلغ: {final_price:,} تومان"
+                ),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            print(f"❌ خطا در اطلاع‌رسانی به ادمین: {e}")
+
+        # پرسیدن شماره تماس
+        user_info = await get_user_info(user_id)
+        if user_info and not user_info['phone_number']:
+            await message.answer(
+                "📞 **لطفاً شماره تماس خودت رو وارد کن:**\n\n"
+                "(مثال: `09123456789`)"
+            )
+        return
+
+    # ۳. در غیر این صورت، برو سمت AI
     response_text = await get_ai_response_async(message.text)
     await message.answer(response_text)
 
