@@ -2891,8 +2891,15 @@ async def main():
     print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
 
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
-    PORT = int(os.getenv("PORT", 10000))
-    WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+PORT = int(os.getenv("PORT", 10000))
+
+if not RENDER_URL:
+    raise RuntimeError("RENDER_EXTERNAL_URL تنظیم نشده است")
+
+RENDER_URL = RENDER_URL.rstrip("/")
+
+WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
+
 
     # ست کردن Webhook در تلگرام
     await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
