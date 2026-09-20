@@ -27,10 +27,31 @@ from database import (
 # ==========================================
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))  # 🟢 اینجا آیدی عددی تلگرام خودت رو بذار
-CARD_NUMBER = "6219-8619-4669-5482"  # 🟢 شماره کارت خودت رو اینجا بذار
-# شماره پشتیبانی
-SUPPORT_PHONE = "09017674604"  # 🟢 شماره پشتیبانی
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+ADMIN_ID_TEXT = os.getenv("ADMIN_ID")
+CARD_NUMBER = os.getenv("CARD_NUMBER")
+SUPPORT_PHONE = os.getenv("SUPPORT_PHONE")
+
+if not TELEGRAM_BOT_TOKEN:
+    raise RuntimeError("TELEGRAM_BOT_TOKEN تنظیم نشده است")
+
+if not GEMINI_API_KEY and not GROQ_API_KEY:
+    raise RuntimeError("حداقل یکی از GEMINI_API_KEY یا GROQ_API_KEY باید تنظیم شود")
+
+if not ADMIN_ID_TEXT:
+    raise RuntimeError("ADMIN_ID تنظیم نشده است")
+
+if not CARD_NUMBER:
+    raise RuntimeError("CARD_NUMBER تنظیم نشده است")
+
+if not SUPPORT_PHONE:
+    raise RuntimeError("SUPPORT_PHONE تنظیم نشده است")
+
+try:
+    ADMIN_ID = int(ADMIN_ID_TEXT)
+except ValueError as exc:
+    raise RuntimeError("ADMIN_ID باید عددی باشد") from exc
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
