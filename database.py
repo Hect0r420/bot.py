@@ -164,18 +164,18 @@ async def get_order_status(order_code: str):
     finally:
         await conn.close()
 
-async def save_pending_order(user_id: int, product_id: int):
-    """ذخیره‌ی سفارش نیمه‌کاره (کاربر محصول رو انتخاب کرده ولی تعداد رو نداده)"""
+async def save_pending_order(user_id: int, product_id: int, quantity: int = None):
+    """ذخیره‌ی سفارش نیمه‌کاره (با تعداد اختیاری)"""
     conn = await get_connection()
     try:
         await conn.execute(
-            """INSERT INTO pending_orders (user_id, product_id, updated_at)
-               VALUES ($1, $2, CURRENT_TIMESTAMP)
+            """INSERT INTO pending_orders (user_id, product_id, quantity, updated_at)
+               VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
                ON CONFLICT (user_id) 
-               DO UPDATE SET product_id = $2, updated_at = CURRENT_TIMESTAMP""",
-            user_id, product_id
+               DO UPDATE SET product_id = $2, quantity = $3, updated_at = CURRENT_TIMESTAMP""",
+            user_id, product_id, quantity
         )
-        print(f"✅ سفارش نیمه‌کاره برای کاربر {user_id} ذخیره شد.")
+        print(f"✅ سفارش نیمه‌کاره برای کاربر {user_id} ذخیره شد. (تعداد: {quantity})")
     finally:
         await conn.close()
 
