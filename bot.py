@@ -2868,6 +2868,7 @@ async def handle_all_messages(message: types.Message):
 # ==========================================
 # ۱۰. اجرای اصلی (Webhook)
 # ==========================================
+
 async def main():
     print(">>> ربات حرفه‌ای هکتور آنلاین شاپ با موفقیت روشن شد و آماده‌ی پاسخگویی است...")
 
@@ -2875,23 +2876,42 @@ async def main():
     await init_db()
     print(">>> دیتابیس راه‌اندازی شد.")
 
-    # راه‌اندازی زمان‌بند یادآوری پرداخت (هر ۱ ساعت)
-    scheduler.add_job(check_pending_orders, 'interval', hours=1)
+    # راه‌اندازی زمان‌بندی یادآوری پرداخت؛ هر ۱ ساعت
+    scheduler.add_job(
+        check_pending_orders,
+        "interval",
+        hours=1
+    )
 
-    # راه‌اندازی زمان‌بند گزارش فروش روزانه (هر شب ساعت ۱۲)
-    scheduler.add_job(send_daily_report, 'cron', hour=0, minute=0)
+    # راه‌اندازی گزارش فروش روزانه؛ هر شب ساعت ۱۲
+    scheduler.add_job(
+        send_daily_report,
+        "cron",
+        hour=0,
+        minute=0
+    )
 
-# راه‌اندازی زمان‌بند تخفیف تولد (هر روز ساعت ۹ صبح)
-    scheduler.add_job(check_birthdays, 'cron', hour=9, minute=0)
+    # راه‌اندازی تخفیف تولد؛ هر روز ساعت ۹ صبح
+    scheduler.add_job(
+        check_birthdays,
+        "cron",
+        hour=9,
+        minute=0
+    )
 
-# راه‌اندازی زمان‌بند هشدار اتمام موجودی (هر ۶ ساعت)
-    scheduler.add_job(check_low_stock, 'interval', hours=6)
+    # راه‌اندازی هشدار موجودی؛ هر ۶ ساعت
+    scheduler.add_job(
+        check_low_stock,
+        "interval",
+        hours=6
+    )
 
     scheduler.start()
-    print(">>> زمان‌بند یادآوری پرداخت فعال شد.")
+    print(">>> زمان‌بندی‌ها فعال شدند.")
 
+    # تنظیمات Render
     RENDER_URL = os.getenv("RENDER_EXTERNAL_URL")
-PORT = int(os.getenv("PORT", 10000))
+    PORT = int(os.getenv("PORT", 10000))
 
     if not RENDER_URL:
         raise RuntimeError("RENDER_EXTERNAL_URL تنظیم نشده است")
@@ -2900,10 +2920,11 @@ PORT = int(os.getenv("PORT", 10000))
 
     WEBHOOK_PATH = f"/webhook/{TELEGRAM_BOT_TOKEN}"
 
+    # تنظیم Webhook تلگرام
+    await bot.set_webhook(
+        url=f"{RENDER_URL}{WEBHOOK_PATH}"
+    )
 
-
-    # ست کردن Webhook در تلگرام
-    await bot.set_webhook(url=f"{RENDER_URL}{WEBHOOK_PATH}")
     print(f">>> Webhook تنظیم شد: {RENDER_URL}{WEBHOOK_PATH}")
 
     # ساخت وب‌سرور aiohttp
@@ -2913,23 +2934,39 @@ PORT = int(os.getenv("PORT", 10000))
         dispatcher=dp,
         bot=bot,
     )
-    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
 
-    # این خط برای UptimeRobot (بیدار موندن)
+    webhook_requests_handler.register(
+        app,
+        path=WEBHOOK_PATH
+    )
+
+    # مسیر بررسی سلامت سرویس
     async def health_check(request):
         return web.Response(text="Hector Bot is alive!")
 
     app.router.add_get("/health", health_check)
 
-    setup_application(app, dp, bot=bot)
+    setup_application(
+        app,
+        dp,
+        bot=bot
+    )
 
     # اجرای وب‌سرور
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, host="0.0.0.0", port=PORT)
+
+    site = web.TCPSite(
+        runner,
+        host="0.0.0.0",
+        port=PORT
+    )
+
     await site.start()
 
     print(f">>> سرور روی پورت {PORT} بالا آمد. ربات آماده است!")
+
+    # زنده نگه داشتن برنامه
     await asyncio.Event().wait()
 
 
