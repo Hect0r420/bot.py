@@ -530,3 +530,146 @@ async def delete_pending_checkout(user_id: int):
         )
     finally:
         await conn.close()
+
+async def create_cart_order(
+    user_id: int,
+    order_code: str,
+    discount_percent: int = 0
+):
+    """ثبت اتمیک کل سبد خرید به‌عنوان یک سفارش چندمحصولی"""
+
+    conn = await get_connection()
+
+    try:
+        async with conn.transaction():
+            cart_items = await conn.fetch(
+                """
+                SELECT
+                    c.product_id,
+                    c.quantity,
+                    p.name,
+                    p.price,
+                    p.stock
+                FROM cart_items c
+                JOIN products p ON p.product_id = c.product_id
+                WHERE c.user_id = $1
+                FOR UPDATE OF c, p
+                """,
+                user_id
+            )
+
+            if not cart_items:
+                return {
+                    "success": False,
+                    "error": "سبد خرید خالی است"
+                }
+
+            subtotal = 0
+
+            for item in cart_items:
+                if item["quantity"] <= 0:
+                    return {
+                        "success": False,
+                        "error": "تعداد یکی از محصولات نامعتبر است"
+                    }
+
+                if item["quantity"] > item["stock"]:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"موجودی محصول «{item['name']}» کافی نیست"
+                        )
+                    }
+
+                subtotal += item["price"] * item["quantity"]
+
+            if discount_percent < 0 or discount_percent > 100:
+                return {
+                    "success": False,
+                    "error": "درصد تخفیف نامعتبر است"
+                }
+
+            discount_amount = int(
+                subtotal * discount_percent / 100
+            )
+            final_price = subtotal - discount_amount
+
+            # ساخت سفارش اصلی
+            order_row = await conn.fetchrow(
+                """
+                INSERT INTO orders (
+                    order_code,
+                    user_id,
+                    product_id,
+                    quantity,
+                    total_price,
+                    status
+                )
+                VALUES ($1, $2, NULL, 0, $3, $4)
+                RETURNING order_id
+                """,
+                order_code,
+                user_id,
+                final_price,
+                "در انتظار پرداخت"
+            )
+
+            order_id = order_row["order_id"]
+
+            for item in cart_items:
+                item_total = item["price"] * item["quantity"]
+
+                await conn.execute(
+                    """
+                    INSERT INTO order_items (
+                        order_id,
+                        product_id,
+                        product_name,
+                        quantity,
+                        unit_price,
+                        total_price
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    """,
+                    order_id,
+                    item["product_id"],
+                    item["name"],
+                    item["quantity"],
+                    item["price"],
+                    item_total
+                )
+
+                updated = await conn.execute(
+                    """
+                    UPDATE products
+                    SET stock = stock - $1
+                    WHERE product_id = $2
+                      AND stock >= $1
+                    """,
+                    item["quantity"],
+                    item["product_id"]
+                )
+
+                if updated != "UPDATE 1":
+                    raise RuntimeError(
+                        f"موجودی محصول «{item['name']}» تغییر کرده است"
+                    )
+
+            await conn.execute(
+                "DELETE FROM cart_items WHERE user_id = $1",
+                user_id
+            )
+
+            return {
+                "success": True,
+                "order_id": order_id,
+                "order_code": order_code,
+                "subtotal": subtotal,
+                "discount_amount": discount_amount,
+                "final_price": final_price,
+                "items": cart_items
+            }
+
+    finally:
+        await conn.close()
+
