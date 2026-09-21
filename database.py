@@ -56,6 +56,10 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        await conn.execute(
+            "ALTER TABLE orders ALTER COLUMN product_id DROP NOT NULL"
+        )
+
 
 # محصولات داخل هر سفارش چندمحصولی
         await conn.execute("""
