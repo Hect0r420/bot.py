@@ -13,14 +13,42 @@ from aiogram.webhook.aiohttp_server import (
 from google import genai
 from google.genai import types as genai_types
 from database import (
-    init_db, add_user, get_all_products, create_order, get_order_status,
-    save_pending_order, get_pending_order, delete_pending_order,
-    update_user_info, get_user_info, get_connection,
-    add_coupon, get_coupon, use_coupon, get_all_coupons, delete_coupon,
-    add_to_cart, get_cart, clear_cart, remove_from_cart,
-    create_birthday_coupon, get_user_orders, cancel_order, update_order_status,
+    init_db,
+    add_user,
+    get_all_products,
+    create_order,
+    get_order_status,
+
+    save_pending_order,
+    get_pending_order,
+    delete_pending_order,
+
+    save_pending_checkout,
+    get_pending_checkout,
+    delete_pending_checkout,
+
+    update_user_info,
+    get_user_info,
+    get_connection,
+
+    add_coupon,
+    get_coupon,
+    use_coupon,
+    get_all_coupons,
+    delete_coupon,
+
+    add_to_cart,
+    get_cart,
+    clear_cart,
+    remove_from_cart,
+
+    create_birthday_coupon,
+    get_user_orders,
+    cancel_order,
+    update_order_status,
     get_all_users
 )
+
 
 # ==========================================
 # ۱. تنظیمات و اطلاعات پایه (Config)
