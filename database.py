@@ -66,6 +66,15 @@ async def init_db():
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+         # جدول وضعیت Checkout سبد خرید
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS pending_checkouts (
+                user_id BIGINT PRIMARY KEY,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+""")
+
+
 
         # جدول کدهای تخفیف
         await conn.execute("""
@@ -451,5 +460,49 @@ async def get_all_users():
     try:
         rows = await conn.fetch("SELECT user_id, first_name FROM users ORDER BY user_id")
         return rows
+    finally:
+        await conn.close()
+
+async def save_pending_checkout(user_id: int):
+    """ذخیره وضعیت انتظار کد تخفیف برای سبد خرید"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            """
+            INSERT INTO pending_checkouts (user_id, updated_at)
+            VALUES ($1, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id)
+            DO UPDATE SET updated_at = CURRENT_TIMESTAMP
+            """,
+            user_id
+        )
+    finally:
+        await conn.close()
+
+
+async def get_pending_checkout(user_id: int):
+    """بررسی اینکه کاربر در مرحله Checkout هست یا نه"""
+    conn = await get_connection()
+    try:
+        return await conn.fetchrow(
+            """
+            SELECT *
+            FROM pending_checkouts
+            WHERE user_id = $1
+            """,
+            user_id
+        )
+    finally:
+        await conn.close()
+
+
+async def delete_pending_checkout(user_id: int):
+    """پاک کردن وضعیت Checkout بعد از ثبت سفارش"""
+    conn = await get_connection()
+    try:
+        await conn.execute(
+            "DELETE FROM pending_checkouts WHERE user_id = $1",
+            user_id
+        )
     finally:
         await conn.close()
