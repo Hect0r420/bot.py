@@ -2781,7 +2781,148 @@ async def handle_all_messages(message: types.Message):
         )
         return
 
-    # ۲. چک کن اگه کاربر توی حالت انتظار کد تخفیف هست
+        # ۲. پردازش Checkout سبد چندمحصولی
+    pending_checkout = await get_pending_checkout(user_id)
+
+    if pending_checkout:
+        coupon_code = None
+        discount_percent = 0
+
+        # کاربر می‌تواند بدون کد تخفیف ادامه دهد
+        if text == "ندارم" or text.lower() == "ndaram":
+            discount_percent = 0
+
+        else:
+            # بررسی کد تخفیف
+            coupon = await get_coupon(text.upper(), user_id)
+
+            if not coupon:
+                await message.answer(
+                    "❌ کد تخفیف نامعتبر است.\n\n"
+                    "اگر کد دیگری داری، دوباره ارسال کن.\n"
+                    "یا برای ادامه بدون تخفیف بنویس: **ندارم**",
+                    parse_mode="Markdown"
+                )
+                return
+
+            if (
+                coupon["max_uses"] > 0
+                and coupon["used_count"] >= coupon["max_uses"]
+            ):
+                await message.answer(
+                    "❌ ظرفیت استفاده از این کد تخفیف تکمیل شده است.\n\n"
+                    "برای ادامه بدون تخفیف بنویس: **ندارم**",
+                    parse_mode="Markdown"
+                )
+                return
+
+            coupon_code = coupon["code"]
+            discount_percent = coupon["discount_percent"]
+
+        # ساخت کد سفارش
+        order_code = "ORD-" + "".join(
+            random.choices(string.digits, k=5)
+        )
+
+        # ثبت اتمیک کل سبد خرید
+        result = await create_cart_order(
+            user_id=user_id,
+            order_code=order_code,
+            discount_percent=discount_percent
+        )
+
+        if not result["success"]:
+            await delete_pending_checkout(user_id)
+
+            await message.answer(
+                f"❌ سفارش ثبت نشد.\n\n"
+                f"دلیل: {result['error']}\n\n"
+                f"لطفاً سبد خریدت را دوباره بررسی کن."
+            )
+            return
+
+        # افزایش تعداد استفاده از کد تخفیف
+        if coupon_code:
+            await use_coupon(coupon_code)
+
+        # حذف وضعیت انتظار Checkout
+        await delete_pending_checkout(user_id)
+
+        subtotal = result["subtotal"]
+        discount_amount = result["discount_amount"]
+        final_price = result["final_price"]
+
+        items_text = ""
+
+        for item in result["items"]:
+            item_total = item["price"] * item["quantity"]
+
+            items_text += (
+                f"🔹 {item['name']}\n"
+                f"   تعداد: {item['quantity']}\n"
+                f"   مبلغ: {item_total:,} تومان\n"
+            )
+
+        if discount_percent > 0:
+            discount_text = (
+                f"🎟️ کد تخفیف: `{coupon_code}`\n"
+                f"💸 درصد تخفیف: {discount_percent}%\n"
+                f"💸 مبلغ تخفیف: {discount_amount:,} تومان\n"
+            )
+        else:
+            discount_text = "🎟️ کد تخفیف: استفاده نشد\n"
+
+        await message.answer(
+            f"✅ **سفارش شما با موفقیت ثبت شد!**\n\n"
+            f"🆔 کد سفارش: `{order_code}`\n\n"
+            f"📦 **محصولات سفارش:**\n"
+            f"{items_text}\n"
+            f"💵 مبلغ قبل از تخفیف: {subtotal:,} تومان\n"
+            f"{discount_text}"
+            f"💰 **مبلغ قابل پرداخت: {final_price:,} تومان**\n\n"
+            f"💳 لطفاً مبلغ نهایی را به شماره کارت زیر واریز کن:\n"
+            f"`{CARD_NUMBER}`\n\n"
+            f"📸 بعد از پرداخت، عکس رسید را همین‌جا ارسال کن.\n\n"
+            f"⏳ وضعیت سفارش: **در انتظار پرداخت**",
+            parse_mode="Markdown"
+        )
+
+        # اطلاع‌رسانی به ادمین
+        try:
+            await bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"🔔 **سفارش جدید ثبت شد**\n\n"
+                    f"🆔 کد سفارش: `{order_code}`\n"
+                    f"👤 مشتری: "
+                    f"{message.from_user.first_name or 'نامشخص'}\n"
+                    f"🆔 آیدی مشتری: `{user_id}`\n"
+                    f"📦 تعداد کالاها: {len(result['items'])}\n"
+                    f"💰 مبلغ نهایی: {final_price:,} تومان\n"
+                    f"📊 وضعیت: **در انتظار پرداخت**"
+                ),
+                parse_mode="Markdown"
+            )
+        except Exception as e:
+            logging.exception(
+                "خطا در ارسال اطلاع‌رسانی سفارش به ادمین: %s",
+                e
+            )
+
+        # درخواست شماره تماس در صورت نداشتن اطلاعات
+        user_info = await get_user_info(user_id)
+
+        if user_info and not user_info["phone_number"]:
+            await message.answer(
+                "📞 لطفاً شماره تماس خودت را وارد کن:\n\n"
+                "مثال: `09123456789`",
+                parse_mode="Markdown"
+            )
+
+        return
+
+
+    # ۳. چک کن اگه کاربر توی حالت انتظار کد تخفیف هست
     pending = await get_pending_order(user_id)
     if pending and pending.get('quantity'):
         # کاربر توی حالت انتظار کد تخفیف هست
@@ -2900,7 +3041,7 @@ async def handle_all_messages(message: types.Message):
             )
         return
 
-    # ۳. در غیر این صورت، برو سمت AI
+    # ۴. در غیر این صورت، برو سمت AI
     response_text = await get_ai_response_async(message.text)
     await message.answer(response_text)
 
