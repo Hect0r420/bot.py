@@ -629,18 +629,28 @@ async def handle_checkout(callback: types.CallbackQuery):
         await callback.answer()
         return
 
-    # محاسبه‌ی مبلغ کل
-    total = sum(item['price'] * item['quantity'] for item in cart)
+    # ذخیره وضعیت کاربر برای مرحله وارد کردن کد تخفیف
+    await save_pending_checkout(user_id)
+
+    # محاسبه مبلغ کل سبد
+    total = sum(
+        item["price"] * item["quantity"]
+        for item in cart
+    )
 
     await callback.message.answer(
         f"🛒 **سبد خرید شما آماده‌ی ثبت نهاییه!**\n\n"
         f"💰 مبلغ کل: {total:,} تومان\n\n"
         f"🎟️ **کد تخفیف داری؟**\n\n"
-        f"اگه داری، کد رو بنویس و بفرست (مثلاً: `WELCOME10`).\n"
-        f"اگه نداری، بنویس: **ندارم**",
+        f"اگه داری، کد رو بنویس و بفرست؛ مثلاً:\n"
+        f"`WELCOME10`\n\n"
+        f"اگه کد تخفیف نداری، بنویس:\n"
+        f"**ندارم**",
         parse_mode="Markdown"
     )
+
     await callback.answer()
+
 
 
 # ==========================================
