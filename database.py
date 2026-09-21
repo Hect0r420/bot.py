@@ -60,14 +60,14 @@ async def init_db():
 # محصولات داخل هر سفارش چندمحصولی
          await conn.execute("""
              CREATE TABLE IF NOT EXISTS order_items (
-              item_id SERIAL PRIMARY KEY,
-              order_id INTEGER NOT NULL,
-              product_id INTEGER NOT NULL,
-              product_name TEXT NOT NULL,
-              quantity INTEGER NOT NULL CHECK (quantity > 0),
-              unit_price BIGINT NOT NULL,
-              total_price BIGINT NOT NULL,
-              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                item_id SERIAL PRIMARY KEY,
+                order_id INTEGER NOT NULL,
+                product_id INTEGER NOT NULL,
+                product_name TEXT NOT NULL,
+                quantity INTEGER NOT NULL CHECK (quantity > 0),
+                unit_price BIGINT NOT NULL,
+                total_price BIGINT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
 """)
 
