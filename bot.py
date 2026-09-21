@@ -736,7 +736,8 @@ async def handle_order_quantity(message: types.Message):
 # ==========================================
 # ۱۷. دریافت کد تخفیف (بعد از تعداد)
 # ==========================================
-@dp.message(F.text.func(lambda t: t.strip() != "" and (t.strip().upper().startswith("BDAY") or "ندارم" in t.strip() or t.strip().lower() == "ndaram")))
+@dp.message(F.text.func(lambda t: t and t.strip() != "" and
+t.strip().upper().startswith("BDAY")))
 async def handle_coupon_input(message: types.Message):
     user_id = message.from_user.id
 
