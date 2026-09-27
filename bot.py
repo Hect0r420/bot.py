@@ -1820,10 +1820,13 @@ async def cmd_add_stock(message: types.Message):
 @dp.message(Command("manage_order"))
 async def cmd_manage_order(message: types.Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        await message.answer(
+            "⛔ شما اجازه‌ی استفاده از این دستور را ندارید."
+        )
         return
 
     parts = message.text.split()
+
     if len(parts) != 2:
         await message.answer(
             "❌ فرمت اشتباهه!\n\n"
@@ -1838,44 +1841,126 @@ async def cmd_manage_order(message: types.Message):
     order_code = parts[1].upper()
 
     conn = await get_connection()
+
     try:
         order = await conn.fetchrow(
-            """SELECT o.*, p.name as product_name, u.first_name, u.phone_number
-               FROM orders o
-               LEFT JOIN products p ON o.product_id = p.product_id
-               LEFT JOIN users u ON o.user_id = u.user_id
-               WHERE o.order_code = $1""",
+            """
+            SELECT
+                o.*,
+                u.first_name,
+                u.phone_number,
+                p.name AS product_name
+            FROM orders o
+            LEFT JOIN users u
+                ON o.user_id = u.user_id
+            LEFT JOIN products p
+                ON o.product_id = p.product_id
+            WHERE o.order_code = $1
+            """,
             order_code
         )
+
+        if order:
+            order_items = await conn.fetch(
+                """
+                SELECT
+                    product_name,
+                    quantity,
+                    unit_price,
+                    total_price
+                FROM order_items
+                WHERE order_id = $1
+                ORDER BY item_id
+                """,
+                order["order_id"]
+            )
+        else:
+            order_items = []
+
     finally:
         await conn.close()
 
     if not order:
-        await message.answer(f"❌ سفارشی با کد `{order_code}` پیدا نشد.", parse_mode="Markdown")
+        await message.answer(
+            f"❌ سفارشی با کد `{order_code}` پیدا نشد.",
+            parse_mode="Markdown"
+        )
         return
+
+    items_text = ""
+
+    if order_items:
+        for item in order_items:
+            items_text += (
+                f"🔹 **{item['product_name']}**\n"
+                f"   تعداد: {item['quantity']}\n"
+                f"   قیمت واحد: "
+                f"{item['unit_price']:,} تومان\n"
+                f"   مبلغ: "
+                f"{item['total_price']:,} تومان\n"
+            )
+    else:
+        # سازگاری با سفارش‌های قدیمی تک‌محصولی
+        items_text = (
+            f"🔹 **{order['product_name'] or 'نامشخص'}**\n"
+            f"   تعداد: {order['quantity']}\n"
+        )
 
     caption = (
         f"📦 **مدیریت سفارش**\n\n"
         f"🆔 کد سفارش: `{order['order_code']}`\n"
         f"👤 مشتری: {order['first_name'] or 'نامشخص'}\n"
-        f"📞 تماس: `{order['phone_number'] or 'ندارد'}`\n"
-        f"📦 محصول: {order['product_name'] or 'نامشخص'}\n"
-        f"🔢 تعداد: {order['quantity']}\n"
-        f"💰 مبلغ: {order['total_price']:,} تومان\n"
+        f"📞 تماس: `{order['phone_number'] or 'ندارد'}`\n\n"
+        f"📦 **محصولات سفارش:**\n"
+        f"{items_text}\n"
+        f"💰 مبلغ کل: "
+        f"{order['total_price']:,} تومان\n"
         f"📊 وضعیت فعلی: **{order['status']}**\n\n"
-        f"👇 لطفاً وضعیت جدید رو انتخاب کن:"
+        f"👇 لطفاً وضعیت جدید را انتخاب کن:"
     )
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 در حال پردازش", callback_data=f"setstatus_{order_code}_در حال پردازش")],
-            [InlineKeyboardButton(text="🚚 ارسال شده", callback_data=f"setstatus_{order_code}_ارسال شده")],
-            [InlineKeyboardButton(text="✅ تحویل داده شده", callback_data=f"setstatus_{order_code}_تحویل داده شده")],
-            [InlineKeyboardButton(text="❌ لغو سفارش", callback_data=f"setstatus_{order_code}_لغو شده")],
+            [
+                InlineKeyboardButton(
+                    text="🔄 در حال پردازش",
+                    callback_data=(
+                        f"setstatus_{order_code}_در حال پردازش"
+                    )
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🚚 ارسال شده",
+                    callback_data=(
+                        f"setstatus_{order_code}_ارسال شده"
+                    )
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ تحویل داده شده",
+                    callback_data=(
+                        f"setstatus_{order_code}_تحویل داده شده"
+                    )
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="❌ لغو سفارش",
+                    callback_data=(
+                        f"setstatus_{order_code}_لغو شده"
+                    )
+                )
+            ],
         ]
     )
 
-    await message.answer(caption, reply_markup=keyboard, parse_mode="Markdown")
+    await message.answer(
+        caption,
+        reply_markup=keyboard,
+        parse_mode="Markdown"
+    )
 
 
 @dp.callback_query(F.data.startswith("setstatus_"))
