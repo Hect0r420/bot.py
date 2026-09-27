@@ -1202,18 +1202,51 @@ async def cmd_users(message: types.Message):
 @dp.message(Command("orders"))
 async def cmd_orders(message: types.Message):
     if message.from_user.id != ADMIN_ID:
-        await message.answer("⛔ شما اجازه‌ی استفاده از این دستور را ندارید.")
+        await message.answer(
+            "⛔ شما اجازه‌ی استفاده از این دستور را ندارید."
+        )
         return
 
     conn = await get_connection()
+
     try:
         orders = await conn.fetch(
-            """SELECT o.*, u.first_name, u.phone_number, p.name as product_name
-               FROM orders o
-               LEFT JOIN users u ON o.user_id = u.user_id
-               LEFT JOIN products p ON o.product_id = p.product_id
-               ORDER BY o.created_at DESC LIMIT 20"""
+            """
+            SELECT
+                o.*,
+                u.first_name,
+                u.phone_number,
+                p.name AS product_name
+            FROM orders o
+            LEFT JOIN users u
+                ON o.user_id = u.user_id
+            LEFT JOIN products p
+                ON o.product_id = p.product_id
+            ORDER BY o.created_at DESC
+            LIMIT 20
+            """
         )
+
+        # گرفتن محصولات هر سفارش چندمحصولی
+        order_items_map = {}
+
+        for order in orders:
+            items = await conn.fetch(
+                """
+                SELECT
+                    product_name,
+                    quantity,
+                    unit_price,
+                    total_price
+                FROM order_items
+                WHERE order_id = $1
+                ORDER BY item_id
+                """,
+                order["order_id"]
+            )
+
+            order_items_map[order["order_id"]] = items
+
     finally:
         await conn.close()
 
@@ -1221,25 +1254,55 @@ async def cmd_orders(message: types.Message):
         await message.answer("📦 هیچ سفارشی ثبت نشده.")
         return
 
-    text = f"📦 **آخرین سفارشات** (تعداد: {len(orders)})\n\n"
-    for o in orders:
+    text = (
+        f"📦 **آخرین سفارشات** "
+        f"(تعداد: {len(orders)})\n\n"
+    )
+
+    for order in orders:
         text += (
-            f"🆔 `{o['order_code']}`\n"
-            f"👤 {o['first_name'] or 'نامشخص'}\n"
-            f"📞 `{o['phone_number'] or 'ندارد'}`\n"
-            f"📦 {o['product_name'] or 'نامشخص'}\n"
-            f"🔢 تعداد: {o['quantity']}\n"
-            f"💰 {o['total_price']:,} تومان\n"
-            f"📊 **{o['status']}**\n"
+            f"🆔 `{order['order_code']}`\n"
+            f"👤 {order['first_name'] or 'نامشخص'}\n"
+            f"📞 `{order['phone_number'] or 'ندارد'}`\n"
+        )
+
+        items = order_items_map[order["order_id"]]
+
+        if items:
+            text += "📦 **محصولات:**\n"
+
+            for item in items:
+                text += (
+                    f"🔹 {item['product_name']}\n"
+                    f"   تعداد: {item['quantity']}\n"
+                    f"   مبلغ: {item['total_price']:,} تومان\n"
+                )
+        else:
+            # سازگاری با سفارش‌های قدیمی تک‌محصولی
+            text += (
+                f"📦 محصول: "
+                f"{order['product_name'] or 'نامشخص'}\n"
+                f"🔢 تعداد: {order['quantity']}\n"
+            )
+
+        text += (
+            f"💰 مبلغ کل: {order['total_price']:,} تومان\n"
+            f"📊 **{order['status']}**\n"
             f"─────────────\n"
         )
 
+    # تلگرام پیام بیشتر از حدود ۴۰۰۰ کاراکتر را قبول نمی‌کند
     if len(text) > 4000:
         for i in range(0, len(text), 4000):
-            await message.answer(text[i:i+4000], parse_mode="Markdown")
+            await message.answer(
+                text[i:i + 4000],
+                parse_mode="Markdown"
+            )
     else:
-        await message.answer(text, parse_mode="Markdown")
-
+        await message.answer(
+            text,
+            parse_mode="Markdown"
+        )
 
 @dp.message(Command("admin"))
 async def cmd_admin(message: types.Message):
