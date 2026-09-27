@@ -739,3 +739,32 @@ async def create_cart_order(
     finally:
         await conn.close()
 
+async def get_order_items(order_id: int):
+    """گرفتن همه محصولات داخل یک سفارش"""
+
+    conn = await get_connection()
+
+    try:
+        rows = await conn.fetch(
+            """
+            SELECT
+                item_id,
+                order_id,
+                product_id,
+                product_name,
+                quantity,
+                unit_price,
+                total_price
+            FROM order_items
+            WHERE order_id = $1
+            ORDER BY item_id
+            """,
+            order_id
+        )
+
+        return rows
+
+    finally:
+        await conn.close()
+
+
