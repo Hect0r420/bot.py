@@ -1287,55 +1287,116 @@ async def cmd_admin(message: types.Message):
     await message.answer(admin_help, parse_mode="Markdown")
 
 # ==========================================
-# ۱۳. پیگیری سفارش (دریافت کد سفارش)
+# ۱۳. پیگیری سفارش
 # ==========================================
+
 @dp.message(F.text.regexp(r"^ORD-\d{5}$"))
 async def handle_order_code(message: types.Message):
     order_code = message.text.strip()
+    user_id = message.from_user.id
 
     conn = await get_connection()
+
     try:
-        # گرفتن اطلاعات سفارش با کد سفارش
+        # مشتری فقط سفارش خودش را می‌تواند ببیند
         order = await conn.fetchrow(
-            """SELECT o.*, p.name as product_name
-               FROM orders o
-               LEFT JOIN products p ON o.product_id = p.product_id
-               WHERE o.order_code = $1""",
-            order_code
+            """
+            SELECT *
+            FROM orders
+            WHERE order_code = $1
+              AND user_id = $2
+            """,
+            order_code,
+            user_id
         )
+
+        if order:
+            # محصولات سفارش چندمحصولی
+            order_items = await conn.fetch(
+                """
+                SELECT
+                    product_name,
+                    quantity,
+                    unit_price,
+                    total_price
+                FROM order_items
+                WHERE order_id = $1
+                ORDER BY item_id
+                """,
+                order["order_id"]
+            )
+
+            # سازگاری با سفارش‌های قدیمی تک‌محصولی
+            if not order_items and order["product_id"]:
+                old_item = await conn.fetchrow(
+                    """
+                    SELECT
+                        name AS product_name,
+                        price AS unit_price
+                    FROM products
+                    WHERE product_id = $1
+                    """,
+                    order["product_id"]
+                )
+
+                if old_item:
+                    order_items = [{
+                        "product_name": old_item["product_name"],
+                        "quantity": order["quantity"],
+                        "unit_price": old_item["unit_price"],
+                        "total_price": (
+                            old_item["unit_price"] * order["quantity"]
+                        )
+                    }]
+
     finally:
         await conn.close()
 
     if not order:
         await message.answer(
-            f"❌ سفارشی با کد `{order_code}` پیدا نشد.\n\n"
-            f"لطفاً کد سفارش رو دقیقاً همون‌طور که گرفتی وارد کن.\n"
-            f"📞 یا با پشتیبانی تماس بگیر: `{SUPPORT_PHONE}`",
+            "❌ سفارشی با این کد برای حساب شما پیدا نشد.\n\n"
+            "لطفاً کد سفارش را دقیقاً وارد کنید.\n"
+            f"📞 پشتیبانی: `{SUPPORT_PHONE}`",
             parse_mode="Markdown"
         )
         return
 
-    # وضعیت سفارش رو با ایموجی مناسب نشون بده
     status_emoji = {
         "در انتظار پرداخت": "⏳",
         "در حال پردازش": "🔄",
         "ارسال شده": "🚚",
         "تحویل داده شده": "✅",
         "لغو شده": "❌"
-    }.get(order['status'], "📦")
+    }.get(order["status"], "📦")
+
+    items_text = ""
+
+    for item in order_items:
+        items_text += (
+            f"🔹 **{item['product_name']}**\n"
+            f"   تعداد: {item['quantity']}\n"
+            f"   قیمت واحد: {item['unit_price']:,} تومان\n"
+            f"   مبلغ: {item['total_price']:,} تومان\n"
+            f"─────────────\n"
+        )
+
+    if not items_text:
+        items_text = "اطلاعات محصولات این سفارش در دسترس نیست.\n"
 
     await message.answer(
         f"📦 **وضعیت سفارش شما**\n\n"
-        f"🆔 کد سفارش: `{order['order_code']}`\n"
-        f"🛍️ محصول: {order['product_name'] or 'نامشخص'}\n"
-        f"🔢 تعداد: {order['quantity']} عدد\n"
-        f"💰 مبلغ کل: {order['total_price']:,} تومان\n"
+        f"🆔 کد سفارش: `{order['order_code']}`\n\n"
+        f"🛍️ **محصولات سفارش:**\n"
+        f"{items_text}\n"
+        f"💰 مبلغ کل: **{order['total_price']:,} تومان**\n"
         f"{status_emoji} وضعیت فعلی: **{order['status']}**\n\n"
-        f"📅 تاریخ ثبت: {order['created_at'].strftime('%Y-%m-%d %H:%M')}\n\n"
-        f"💬 هر سوالی داشتی، با پشتیبانی تماس بگیر:\n"
+        f"📅 تاریخ ثبت: "
+        f"{order['created_at'].strftime('%Y-%m-%d %H:%M')}\n\n"
+        f"💬 اگر سؤالی داشتی با پشتیبانی تماس بگیر:\n"
         f"📞 `{SUPPORT_PHONE}`",
         parse_mode="Markdown"
     )
+
 
 # ==========================================
 # ۱۱. دستور استعلام موجودی محصول (ادمین)
