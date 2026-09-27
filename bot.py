@@ -2717,15 +2717,82 @@ async def cmd_my_orders(message: types.Message):
         await message.answer(
             "📦 **سفارشات شما**\n\n"
             "😔 در حال حاضر هیچ سفارش فعالی ندارید.\n\n"
-            "🛒 برای ثبت سفارش جدید، از منوی اصلی استفاده کنید."
+            "🛒 برای ثبت سفارش جدید، از منوی اصلی استفاده کنید.",
+            parse_mode="Markdown"
         )
         return
 
     await message.answer(
-        f"📦 **سفارشات فعال شما** (تعداد: {len(orders)})\n\n"
-        f"👇 برای لغو هر سفارش، روی دکمه‌ی مربوطه بزن:",
+        f"📦 **سفارشات فعال شما** "
+        f"(تعداد: {len(orders)})\n\n"
+        f"👇 برای لغو هر سفارش، روی دکمه مربوطه بزن:",
         parse_mode="Markdown"
     )
+
+    for order in orders:
+        can_cancel = order["status"] in [
+            "در انتظار پرداخت",
+            "در حال پردازش"
+        ]
+
+        # دریافت همه محصولات سفارش چندمحصولی
+        items = await get_order_items(order["order_id"])
+
+        items_text = ""
+
+        if items:
+            for item in items:
+                items_text += (
+                    f"🔹 **{item['product_name']}**\n"
+                    f"   تعداد: {item['quantity']}\n"
+                    f"   مبلغ: {item['total_price']:,} تومان\n"
+                )
+        else:
+            # سازگاری با سفارش‌های قدیمی تک‌محصولی
+            old_product_name = order.get(
+                "product_name",
+                "نامشخص"
+            )
+
+            items_text = (
+                f"🔹 **{old_product_name or 'نامشخص'}**\n"
+                f"   تعداد: {order['quantity']}\n"
+            )
+
+        caption = (
+            f"🆔 کد سفارش: `{order['order_code']}`\n\n"
+            f"📦 **محصولات سفارش:**\n"
+            f"{items_text}\n"
+            f"💰 مبلغ کل: "
+            f"{order['total_price']:,} تومان\n"
+            f"📊 وضعیت: **{order['status']}**"
+        )
+
+        if can_cancel:
+            keyboard = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="❌ لغو سفارش",
+                            callback_data=(
+                                f"cancel_{order['order_code']}"
+                            )
+                        )
+                    ]
+                ]
+            )
+
+            await message.answer(
+                caption,
+                reply_markup=keyboard,
+                parse_mode="Markdown"
+            )
+        else:
+            await message.answer(
+                caption + "\n\n⚠️ این سفارش قابل لغو نیست.",
+                parse_mode="Markdown"
+            )
+
 
     for order in orders:
         can_cancel = order['status'] in ["در انتظار پرداخت", "در حال پردازش"]
