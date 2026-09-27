@@ -441,27 +441,93 @@ async def get_user_orders(user_id: int):
 
 
 async def cancel_order(order_code: str):
-    """لغو سفارش و برگرداندن موجودی محصول"""
+    """لغو امن سفارش و برگرداندن موجودی همه محصولات"""
+
     conn = await get_connection()
+
     try:
-        order = await conn.fetchrow(
-            "SELECT * FROM orders WHERE order_code = $1", order_code
-        )
-        if not order:
-            return None
+        async with conn.transaction():
+            order = await conn.fetchrow(
+                """
+                SELECT *
+                FROM orders
+                WHERE order_code = $1
+                FOR UPDATE
+                """,
+                order_code
+            )
 
-        await conn.execute(
-            "UPDATE orders SET status = 'لغو شده' WHERE order_code = $1",
-            order_code
-        )
+            if not order:
+                return None
 
-        await conn.execute(
-            "UPDATE products SET stock = stock + $1 WHERE product_id = $2",
-            order['quantity'], order['product_id']
-        )
+            # جلوگیری از لغو دوباره یا لغو سفارش تحویل‌شده
+            if order["status"] not in (
+                "در انتظار پرداخت",
+                "در حال پردازش"
+            ):
+                return None
 
-        print(f"✅ سفارش {order_code} لغو شد و موجودی برگشت.")
-        return order
+            order_items = await conn.fetch(
+                """
+                SELECT product_id, quantity
+                FROM order_items
+                WHERE order_id = $1
+                FOR UPDATE
+                """,
+                order["order_id"]
+            )
+
+            if order_items:
+                # سفارش چندمحصولی جدید
+                for item in order_items:
+                    await conn.execute(
+                        """
+                        UPDATE products
+                        SET stock = stock + $1
+                        WHERE product_id = $2
+                        """,
+                        item["quantity"],
+                        item["product_id"]
+                    )
+            else:
+                # سازگاری با سفارش‌های قدیمی تک‌محصولی
+                if order["product_id"] is not None:
+                    await conn.execute(
+                        """
+                        UPDATE products
+                        SET stock = stock + $1
+                        WHERE product_id = $2
+                        """,
+                        order["quantity"],
+                        order["product_id"]
+                    )
+
+            updated_order = await conn.fetchrow(
+                """
+                UPDATE orders
+                SET status = 'لغو شده'
+                WHERE order_id = $1
+                  AND status IN (
+                      'در انتظار پرداخت',
+                      'در حال پردازش'
+                  )
+                RETURNING *
+                """,
+                order["order_id"]
+            )
+
+            # اگر هم‌زمان شخص دیگری سفارش را تغییر داده باشد
+            if not updated_order:
+                raise RuntimeError(
+                    "وضعیت سفارش هم‌زمان تغییر کرده است"
+                )
+
+            print(
+                f"✅ سفارش {order_code} لغو شد و موجودی برگردانده شد."
+            )
+
+            return updated_order
+
     finally:
         await conn.close()
 
